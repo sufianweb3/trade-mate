@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+.next/
+*.tsbuildinfo
+.env*
+!.env.testnet.example
+.demo-data/
+coverage/
+release/
+# local trade data / recovered DB copies: never commit
+recovered/
+*.db
+*.db-wal
+*.db-shm
+# desktop app build outputs
+apps/desktop/staging/
+apps/desktop/dist-electron/
+*.log

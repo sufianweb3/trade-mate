@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens. Components use Tailwind token classes only. */
+:root {
+  --bg: 245 245 247;
+  --surface: 255 255 255;
+  --elevated: 250 250 252;
+  --line: 226 226 231;
+  --fg: 29 29 31;
+  --muted: 110 110 115;
+  --accent: 0 113 227;
+  --pos: 36 138 61;
+  --neg: 215 0 21;
+  --warn: 196 120 0;
+  --live: 230 75 20;
+  --paper: 0 113 227;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 10 10 12;
+    --surface: 28 28 30;
+    --elevated: 36 36 40;
+    --line: 56 56 60;
+    --fg: 242 242 247;
+    --muted: 152 152 157;
+    --accent: 10 132 255;
+    --pos: 48 209 88;
+    --neg: 255 69 58;
+    --warn: 255 159 10;
+    --live: 255 105 50;
+    --paper: 10 132 255;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 10 10 12;
+  --surface: 28 28 30;
+  --elevated: 36 36 40;
+  --line: 56 56 60;
+  --fg: 242 242 247;
+  --muted: 152 152 157;
+  --accent: 10 132 255;
+  --pos: 48 209 88;
+  --neg: 255 69 58;
+  --warn: 255 159 10;
+  --live: 255 105 50;
+  --paper: 10 132 255;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+}
+body {
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+* {
+  transition-duration: 180ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*/index.txt",
+      "has": [{ "type": "header", "key": "sec-fetch-dest", "value": "document" }],
+      "missing": [{ "type": "header", "key": "rsc" }],
+      "destination": "/:path*/",
+      "permanent": false
+    },
+    {
+      "source": "/index.txt",
+      "has": [{ "type": "header", "key": "sec-fetch-dest", "value": "document" }],
+      "missing": [{ "type": "header", "key": "rsc" }],
+      "destination": "/",
+      "permanent": false
+    }
+  ]
+}

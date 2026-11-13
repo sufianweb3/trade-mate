@@ -1,0 +1,13 @@
+﻿import { CoinGlassSource } from "./src/scraper/coinglass";
+import { parseTable } from "./src/scraper/parser";
+const url = process.argv[2]!;
+const s = new CoinGlassSource({ url: () => url, profileDir: process.env.TEMP + "/oisn-pw-probe" });
+await s.start();
+await new Promise((r) => setTimeout(r, 8000));
+const r = await s.read();
+console.log("challenge", r.challenge, "headers", JSON.stringify(r.table.headers));
+console.log("rows", r.table.rows.length, JSON.stringify(r.table.rows.slice(0, 2)));
+const p = parseTable(r.table, null);
+console.log("status", p.health.status, "missing", p.health.missingColumns, "mapping", JSON.stringify(p.mapping));
+console.log(JSON.stringify(p.rows.slice(0, 2)));
+await s.stop(); process.exit(0);

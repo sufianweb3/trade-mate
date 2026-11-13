@@ -1,0 +1,40 @@
+{
+  "name": "agent",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "oisniper": "./dist/main.js" },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:testnet": "vitest run --config vitest.testnet.config.ts",
+    "demo": "tsx src/demo/runLive.ts",
+    "demo:scenarios": "tsx src/demo/runScenarios.ts",
+    "gen:dict": "tsx src/export/writeDictionary.ts",
+    "db:generate": "tsx src/store/printSchema.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.0.3",
+    "@napi-rs/keyring": "^1.1.3",
+    "@fastify/websocket": "^11.0.1",
+    "@oisniper/core": "workspace:*",
+    "ccxt": "^4.4.40",
+    "fastify": "^5.2.0",
+    "fflate": "^0.8.2",
+    "node-html-parser": "^7.0.1",
+    "pino": "^9.6.0",
+    "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

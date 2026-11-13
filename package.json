@@ -1,0 +1,31 @@
+{
+  "name": "oisniper",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "dev": "pnpm --parallel --filter agent --filter panel dev",
+    "build": "pnpm --filter @oisniper/core build && pnpm --filter panel build && pnpm --filter agent build",
+    "test": "vitest run",
+    "test:testnet": "pnpm --filter agent test:testnet",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "demo": "pnpm --filter agent demo",
+    "demo:scenarios": "pnpm --filter agent demo:scenarios",
+    "db:generate": "pnpm --filter agent db:generate",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "@napi-rs/keyring"]
+  }
+}

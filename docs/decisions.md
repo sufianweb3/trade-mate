@@ -1,0 +1,79 @@
+# Decisions
+
+One line per decision where the PRD was ambiguous or the environment forced a choice. Safer-for-real-money option chosen.
+
+- SQLite via Node's built-in `node:sqlite` instead of better-sqlite3 + Drizzle: Node 26 on Windows has no better-sqlite3 prebuild (native build needs VS tools); schema is plain SQL migrations in `store/db.ts`, `pnpm db:generate` prints them.
+- `node:sqlite` is loaded with `process.getBuiltinModule` because esbuild (tsup) strips its `node:` prefix; the agent bundle inlines `@oisniper/core` + decimal.js.
+- Monorepo uses `moduleResolution: Bundler` (tsx in dev, tsup bundle for the agent, Next for the panel) so `packages/core` is consumed as TS source.
+- Signal dedupe: a re-match folds into the existing signal only when the symbol also matched on the previous scrape (consecutive) and the signal is inside the cooldown window; a non-consecutive re-match is a new signal (logged as `cooldown` when inside 12h). Literal "one per window" would make `cooldown` status unreachable.
+- Bot 2 rules use strict `> 0` (PRD wording), so a `gt` / `lt` operator exists next to `≥` / `≤` / between.
+- IOC price cap default 0.10% (2x the 0.05% entry-slippage gate); exit / kill closes widen it 2x per retry, 3 retries, then alert.
+- Paper TP1 is a resting reduce-only limit that fills when best bid >= TP price, at its price, charged taker fee (PRD "taker fee on every fill"; conservative vs real maker fee).
+- Paper liquidation is checked on mark before the stop on every tick: a gap through both SL and liq is a liquidation (conservative).
+- Isolated liquidation: whole remaining margin is lost; the clearance fee is recorded as margin minus price loss.
+- SL / TP1 prices are rounded UP to tick (stop never further than configured).
+- Lock 0% with breakeven_fees = entry + round-trip taker fees in ROE.
+- Mark price in CcxtHub = book mid + last observed (mark - mid) basis from the funding endpoint (refreshed 15s), so stops trigger in real time between refreshes.
+- Leverage limits (replaces the earlier 100x fallback, which overstated paper results): Binance with any key = private per-symbol brackets; Bybit/OKX/Gate/KuCoin = their public tiers; otherwise the LOWEST public max leverage and STRICTEST maintenance tiers across Bybit/OKX/Gate, trade flagged leverage_unverified; no data at all = 0 (rejected). Cached 15 min, pre-resolved for the near-trigger watchlist.
+- Exchange data source: OI in USD (contracts x contract size x mark) from Binance (per symbol, universe only), Bybit (single-side OI; its openInterest counts both sides), OKX, Gate, KuCoin; price/volume from 5m/1h candles of Binance (else Bybit); universe = top 100 coins by 24h volume that a trade venue lists. Aggregated % change sums only venues present at both ends of the window. Volume change 5m and OI 24h are not computed (no 48h history) and stay null.
+- "Trade venue only" OI scope = the bot's first exchange (Binance for ALL / venues without OI data).
+- Comparison mode: every signal gets a +15m/+1h/+4h counterfactual (not only rejected ones) so CoinGlass and Exchange are compared on the same basis; shadow signals = rule matches only, no gates.
+- Attaching SL to the entry order (Bybit tpsl / OKX attachAlgoOrds) is NOT used: those are position-level / algo stops whose ids the trailing cancel-replace cannot manage safely. The stop is placed right after the fill ack (WS order API where available) and sl_placed - fill is measured against the 500 ms target instead.
+- Live entry: WS order API (createOrderWs) where ccxt supports it, REST fallback only on transport errors (clientOrderId keeps retries idempotent); IOC result taken from the order response when final (Binance newOrderRespType=RESULT).
+- Clock: live orders blocked when |offset| > 500 ms (was 1 s).
+- Pairing link uses #pair= (URL fragment, never sent to Vercel) instead of ?pair=.
+- Data gaps on real exchanges = WebSocket stream failure, not silence (thin books are legitimately quiet); replays fetch only the gap window.
+- Uncaught library errors (e.g. ccxt WebSocket keep-alive on a closing socket) are contained, logged and alerted; the agent keeps managing positions.
+- CoinGlass browser: Brave, else Chrome, else Edge, else bundled Chromium (OISNIPER_BROWSER overrides). Columns must be enabled once by the user via Customize while logged in (account-saved); the scraper re-applies them when it can and is DEGRADED only when a metric used by an enabled rule (or price) has no data.
+- Real Mode Readiness gates Real start (API level): key validated, no withdrawal, isolated, one-way, leverage settable (user-triggered Check & prepare), clock < 500 ms, testnet pass recorded by `pnpm test:testnet`. Exchanges without testnet keys can never pass, so Real cannot trade there.
+- Leverage tiers: superseded by the "Leverage limits" line above (real tiers or strictest public tiers; unknown = rejected). Validator preview uses 0.4% MMR (Binance bracket 1) as in the PRD example.
+- Live sizing base (`% of balance`) and live "wallet balance" = `max_capital`, so a bot can never size above its cap; start balance of a live run = that cap.
+- Permissions: Binance, Bybit, OKX keys are read and refused if withdrawal is on. Gate, KuCoin, MEXC do not expose permissions: the key is marked `unverified` and needs an explicit "no withdrawal" confirmation.
+- Trade capability probe (MEXC suspensions) cancels a non-existent order id and inspects the error; it never places an order.
+- WebSocket auth: token in the first message (browsers cannot set headers; tokens never go in URLs where they could be logged).
+- Static panel files are served without the bearer token (they contain no data); every `/api/*` route requires it, `/health` is open.
+- Telegram notifications (PRD 14.4, P1) deferred to V2: PRD open question 2, and it would send trade data to a third party (CLAUDE.md rule 1). Flagged.
+- Framer Motion not used: CSS transitions (150-250ms) with `prefers-reduced-motion` cover the spec with less code.
+- Paper accounts are per bot (`sim:<botId>`), so the cross-bot symbol lock only bites on live accounts (`live:<exchange>`), as the PRD intends.
+- Counterfactual TP1/SL-first is sampled every 30s on mark; signals rejected before routing get a venue from the symbol mapper.
+- Downtime / gap replay uses 1m candles with low before high inside each candle (SL assumed to hit first, conservative).
+- Next.js telemetry is disabled in the panel scripts (no analytics, CLAUDE.md rule 1).
+- CoinGlass (checked live, Nov 2026): homepage table is Ant Design with a sticky header (header and body are separate tables), 20 rows per page. Needed columns (OI change 5m-24h, volume 5m-24h and %, price change 5m-24h) are off by default; the scraper enables them via "Customize" each page load (logged-out choice does not survive reload), sorts by OI change 5m descending and reads the first 3 pages (60 strongest OI movers). Volume change 5m does not exist on CoinGlass and stays null.
+- CoinGlass answers repeated automated loads with "404 Not Found": treated as CHALLENGE (user opens Show browser), retried at most every 5 minutes. Never circumvented.
+- Cooldown = open position OR < 12h since last entry OR < 12h since last close, per bot and CoinGlass base symbol (so 1000PEPE and PEPE are one symbol). Logged as COOLDOWN (plus OPEN_POSITION when that is the cause).
+- Three fixed-mode bots: paper (Bot 1, simulator), real (Bot 1, live), test (Bot 2 grid, simulator). Separate accounts, versions and settings; mode cannot be switched on a bot. All bots are forced to Stopped on every agent start; open positions are still reconciled and managed.
+- The repo had no `sufianweb3/tradingbot` code to audit; CoinGlass selectors are generic (largest table, header text) and must be checked against the live page once.
+- Book hot path: a full Decimal book is built at most every 200 ms per stream (gates accept books up to 2 s old); every WS update still emits a top-of-book tick for stops and trailing. Measured before: the agent event loop stalled up to 47 s with ~40 books (per-update zod + Decimal conversion of all levels).
+- 1-minute range (volatility gate) uses 1 s high/low buckets instead of every tick (exact range, constant cost per tick).
+- Clock offset = lowest-RTT of 3 samples per exchange, so a slow response cannot fake an offset (a stalled loop once showed 87 s).
+- Signals without a max-open-positions limit (Test grid) are processed up to 4 symbols in parallel; with a limit they stay sequential so the count is exact.
+- Binance per-symbol OI gets a 10 s deadline per poll; coins not reached are null for that poll (never 0) instead of the whole venue timing out.
+- Counterfactual follow-up reads only id/ts/cf_data for pending signals (partial index), parses the full signal only when needed, writes only on change and yields every 200 rows.
+- Bot rows (invalidated on every write) and immutable strategy versions (returned as copies) are cached in the Store; they are read on every tick and signal.
+- Exchange data collectors check ticker arrays structurally instead of zod records (zod copied ~600 objects per poll and blocked the loop); each field is still type-checked where read.
+- Distribution for non-technical users: one zip per platform (Windows x64, Mac Apple silicon, Mac Intel) with a bundled official Node runtime, production node_modules and a double-click launcher; no installer, no Electron. Unsigned: Windows SmartScreen / macOS Gatekeeper need one "Run anyway / Open Anyway". Signing (Windows code-signing certificate, Apple Developer ID + notarization) would remove that and is the next step if wanted.
+- Windows zip carries the Microsoft C++ runtime DLLs app-local (redistributable) so the OS keychain loads without the VC++ installer.
+- The Mac launcher clears the quarantine flag inside its own folder (after the user approved it once) so the bundled native modules load.
+- Panel served by the agent talks to its own origin on any localhost port (was hard-wired to 7777).
+- Overview shows a "Get started" card while a Paper/Test bot uses CoinGlass and CoinGlass is not OK: log in, or switch those bots to exchange data (new settings version). The header shows only the data sources the bots use (Real only while running).
+- Release zips hold ~10 files: the app (agent, panel, node_modules) is packed as app.tgz and unpacked by the launcher on first start / after an update (app.version). Windows Explorer's built-in unzip failed (0x80004005) and took 10+ min on the 3,600-file zip; Windows zip entries use plain DOS attributes.
+- Panel push events invalidate only the queries they affect, coalesced to one refetch per 2 s; analytics, source comparison and latency refresh on their own 30-60 s interval. Refetching everything on every event pinned the agent CPU and delayed book/WS processing (stale-book gate failures, exchange poll timeouts).
+- `/api/signals` returns slim rows (no per-variant gate results / router); `/api/signals/:id` returns the full record. Source comparison and latency read `data_source` (new column, migration 4) and latency fields via SQL instead of parsing every ~50 KB signal.
+- Export streams signals, yields the loop every 100 rows and zips off the main thread; the pack now also has `signals.jsonl` with every variant's gates.
+- Spread gate fails a crossed or locked book (spread <= 0): it is a stale/broken book, not a cheap entry.
+- Top-level page loads of a Next RSC payload (`*/index.txt`) redirect to the page (agent static server and vercel.json): Next hard-navigates there when a client navigation fails or the build changed.
+- CoinGlass scraper relaunches its browser (same profile) when the page/context was closed, at most once a minute; before, a crashed browser left CoinGlass dead until the agent restarted.
+- Adaptive entry (`adaptive` config, default OFF so PRD 13 "clamp is off" still holds): leverage fit tries the configured leverage, then lower ones the venue offers (venue max, tier caps, common steps) down to minLeverage; size fit shrinks margin to minSizePct only if no leverage works at full size. Never raises leverage or size, so $ risk never grows. Every fit is logged (signal.fit, trade config.requested_leverage / size_pct / fitted, ADAPTIVE_FIT event); it is an explicit opt-in, not a silent clamp.
+- Adaptive entry is limited to single-profile bots (Bot 1, live grid selection): the research grid exists to test fixed leverages (PRD 6: over-limit variants skip with LEVERAGE_UNAVAILABLE).
+- With TP/SL in ROE, a fitted lower leverage keeps the $ risk/reward and widens the price distances; the editor shows the price stop at min leverage.
+- Search stops early on a gate no leverage/size can fix (spread, stale book/snapshot, 24h volume, funding).
+- With leverage fit, the router adds a penalty (0.05 x shortfall share) for venues whose max leverage is below the configured one, and keeps venues that can fill the smallest fitted order (with the depth penalty).
+- Restored open trades take their exit profile leverage from the trade record, not the config (a fitted trade must not come back at the configured leverage).
+- Router venue fallback: gates run on up to 3 ranked venues in score order and the first that passes trades. Previously only the cheapest venue was gated, so one venue's wide spread or low leverage cap dropped signals other venues could take. No retry after an order was sent on a venue (no double entry). Reasons/fit of a rejected signal come from the best-ranked venue; every venue's gates are kept, tagged with `exchange`, plus `venue_tries`.
+- Router excludes crossed/locked books (bid >= ask, `BOOK_CROSSED`) and books older than `maxBookAgeMs` (`BOOK_STALE`): a crossed book prices as the cheapest venue and was winning the ranking. The hub never stores a crossed WS book (REST resync, at most every 5 s) and drops crossed top-of-book ticks so paper stops never trigger on them.
+- Adaptive fit order changed: configured leverage at full size (logged), then the coin's own leverage (capped at the configured one) with smaller sizes, and below the coin's max only when the leverage itself fails (`leverage` tier cap, `liq_buffer`). Depth/slippage/cost/chase/volatility at the coin's leverage end the search instead of being dodged by dropping to e.g. 7x, which widens the ROE stop and target in price (both run_2 trades went to 7x for depth).
+- 2026-11-10 Test grid (Bot 2) revised by the user: enters when at least 3 of OI 5m/15m/30m/1h/4h and at least 1 of Volume 5m/1h/4h are > 0 (new `ruleGroups`, enabled rows outside a group stay AND-ed); price rules off but still collected; leverages 5/10/15/20/30/50 x the 5 trail variants = 30 positions of $100 per entry.
+- Test grid re-entry (`reentry: "while_open"`): the 15 min window runs from the last entry only; open positions and closes do not block. Paper only: the validator rejects it in live (one-way mode holds one position per symbol). A failed re-entry never releases the symbol lock its open positions hold.
+- Existing Test bots (preset `research_grid`) get one new version on agent start with the new rules, rule groups, leverages, $100 margin and 15 min re-entry; venues, gates, exits and data source are kept, old versions stay immutable, open trades keep their version.
+- Demo `quiet()` rows set OI 4h to -0.6 so they stay below the Test grid's 3-of-5 OI rule ("no rule matches").
+- Default gates changed at the user's request (2026-11-10, after replaying the run_2 export): spread 0.05% -> 0.2%, entry slippage 0.05% -> 0.2%, entry/exit depth 20x -> 5x. Others unchanged (cost-to-target 40%, chase 50%, 1m range 300%, funding 0.1%, book age 2 s, min 24h volume $10M). PRD Section 8 table updated to match. Saved bot configs keep their own values; the defaults apply to new bots and preset resets.
