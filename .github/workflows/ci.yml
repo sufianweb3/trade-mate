@@ -1,0 +1,70 @@
+# Every pull request into main must pass these before it can be merged (branch protection).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Same Node as the bundled engine runtime and the local test runs.
+  NODE_VERSION: "26.13.0"
+
+jobs:
+  checks:
+    name: Typecheck, lint, test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  package:
+    name: Package (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            stage: win-x64
+            builder: --win --x64
+          - name: macOS
+            os: macos-latest
+            stage: mac-arm64
+            builder: --mac --arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter desktop build:shell
+      - run: node apps/desktop/scripts/stage-agent.mjs ${{ matrix.stage }}
+      # Unpacked app only (no installer) to prove packaging works; installers are built by release.yml.
+      - run: pnpm --filter desktop exec electron-builder --dir --publish never ${{ matrix.builder }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"

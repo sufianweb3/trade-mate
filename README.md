@@ -3,6 +3,7 @@
 Local-first crypto futures bot. Static panel (Next.js export) + a trading agent on your own machine.
 Signals from CoinGlass (scraped locally), execution through ccxt on Binance, Bybit, OKX, Gate, KuCoin, MEXC.
 Spec: [PRD.md](PRD.md). Working rules: [CLAUDE.md](CLAUDE.md). Choices made where the PRD was open: [docs/decisions.md](docs/decisions.md).
+Desktop app (Windows + macOS installer): [apps/desktop](apps/desktop/README.md). Versioning and releases: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## For users: install in 3 steps (Windows and Mac, nothing else to install)
 
