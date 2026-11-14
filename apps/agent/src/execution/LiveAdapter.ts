@@ -1,6 +1,7 @@
 import { D, Decimal, ZERO, type ErrorCode, type ExchangeId } from "@oisniper/core";
 import { EventEmitter } from "node:events";
 import { z } from "zod";
+import { log } from "../log";
 import type { MarketHub } from "../market/types";
 import { QUIRKS } from "../market/quirks";
 import { call } from "../market/quirks/types";
@@ -15,11 +16,17 @@ const Order = z.object({
   status: z.string().nullable().optional(),
   filled: z.number().nullable().optional(),
   average: z.number().nullable().optional(),
+  cost: z.number().nullable().optional(),
   price: z.number().nullable().optional(),
   fee: z.object({ cost: z.number().nullable().optional() }).nullable().optional(),
   timestamp: z.number().nullable().optional(),
 }).passthrough();
 const Position = z.object({ symbol: z.string(), contracts: z.number().nullable().optional(), side: z.string().nullable().optional() }).passthrough();
+
+/** True when an IOC response says how much filled and, if anything filled, at what price. */
+export function iocSettled(o: { status?: string | null; filled?: number | null; average?: number | null }): boolean {
+  return ["closed", "canceled", "cancelled", "expired"].includes(o.status ?? "") && o.filled != null && (o.filled === 0 || o.average != null);
+}
 
 /** Map exchange errors to internal codes. The only place this happens. */
 export function mapExchangeError(e: unknown): ErrorCode {
@@ -36,9 +43,15 @@ export function mapExchangeError(e: unknown): ErrorCode {
   return "EXCHANGE_ERROR";
 }
 
-interface Tracked { ctx: PositionCtx; stopId: string | null; tpId: string | null; stopTrigger: Decimal | null; tpPrice: Decimal | null; capitalUsed: Decimal }
+/** stopIds: every stop order placed for the trade. Stops live in the exchange's trigger book and must be cancelled as such. */
+interface Tracked { ctx: PositionCtx; stopId: string | null; stopIds: Set<string>; tpId: string | null; stopTrigger: Decimal | null; tpPrice: Decimal | null; capitalUsed: Decimal }
 
-export interface LiveOptions { botId: string; hub: MarketHub; clock: Clock; accounts: LiveAccounts; maxCapital: Decimal; takerOverridePct: Record<string, number> }
+export interface LiveOptions {
+  botId: string; hub: MarketHub; clock: Clock; accounts: LiveAccounts;
+  /** Read on every use: a saved settings change (raise or lower) applies at once, without a restart. */
+  maxCapital: () => Decimal;
+  takerOverridePct: Record<string, number>;
+}
 
 /** Real orders through ccxt. Every entry also gets a shadow SimAdapter fill for calibration. */
 export class LiveAdapter implements ExecutionAdapter {
@@ -129,10 +142,10 @@ export class LiveAdapter implements ExecutionAdapter {
     return u;
   }
   async available(): Promise<Decimal | null> {
-    return Decimal.max(this.o.maxCapital.sub(this.used()), 0);
+    return Decimal.max(this.o.maxCapital().sub(this.used()), 0);
   }
   async walletBalance(): Promise<Decimal | null> {
-    return this.o.maxCapital;
+    return this.o.maxCapital();
   }
 
   async placeIoc(req: IocRequest): Promise<FillResult> {
@@ -151,12 +164,24 @@ export class LiveAdapter implements ExecutionAdapter {
       const ackTs = this.o.clock.now();
       this.o.hub.recordOrderLatency(req.exchange, ackTs - sentAt);
       const o = Order.parse(raw);
-      // IOC is final once acknowledged: use the response when it carries the fill, else one REST read.
-      const final = ["closed", "canceled", "cancelled", "expired"].includes(o.status ?? "") && o.filled != null;
-      const full = final ? o : Order.parse(await call(this.client(req.exchange), "fetchOrder", o.id, req.symbol).catch(() => raw));
+      // IOC is final once acknowledged, but Binance answers "FILLED" without the average price: look the order up
+      // (a few quick tries) until both the fill and its price are known.
+      let full = o;
+      for (let i = 0; i < 3 && !iocSettled(full); i++) {
+        if (i > 0) await new Promise((r) => setTimeout(r, 150));
+        const f = await call(this.client(req.exchange), "fetchOrder", o.id, req.symbol).then((x) => Order.parse(x)).catch(() => null);
+        if (f) full = { ...full, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v != null)) };
+      }
       base.ackTs = ackTs;
       const filled = contractsToBase(full.filled ?? 0, m!.contractSize);
-      const avg = full.average != null ? D(full.average) : null;
+      // A filled order is never dropped (CLAUDE.md rule 3): price from the exchange, else cost / qty, else the IOC limit
+      // (at or beyond the real fill, so the stop derived from it errs on the tight side). The fallback is logged.
+      let avg = full.average != null ? D(full.average) : full.cost != null && filled.gt(0) ? D(full.cost).div(filled) : null;
+      if (avg == null && filled.gt(0)) {
+        avg = cap;
+        base.message = "fill price not reported by the exchange: using the order limit price";
+        log.warn({ botId: this.o.botId, tradeId: req.tradeId, ex: req.exchange, orderId: o.id }, base.message);
+      }
       const sim = shadowBook ? simulateIoc(this.o.hub.bookAt(req.exchange, req.symbol, sentAt + lat) ?? shadowBook, req.side, req.qty, cap).avgPrice : null;
       const fee = full.fee?.cost != null ? D(full.fee.cost) : avg ? avg.mul(filled).mul(this.takerPct(req.exchange, req.symbol)).div(100) : ZERO;
       return { ...base, status: filled.isZero() ? "rejected" : filled.lt(req.qty) ? "partial" : "filled", code: filled.isZero() ? "ORDER_NOT_FILLED" : null, orderId: o.id, filledQty: filled, avgPrice: avg, fee, ts: full.timestamp ?? this.o.clock.now(), latencyMs: this.o.clock.now() - sentAt, simFillPrice: sim, realFillPrice: avg };
@@ -167,7 +192,7 @@ export class LiveAdapter implements ExecutionAdapter {
   }
 
   registerPosition(ctx: PositionCtx): void {
-    this.tracked.set(ctx.tradeId, { ctx, stopId: null, tpId: null, stopTrigger: null, tpPrice: null, capitalUsed: ctx.margin });
+    this.tracked.set(ctx.tradeId, { ctx, stopId: null, stopIds: new Set(), tpId: null, stopTrigger: null, tpPrice: null, capitalUsed: ctx.margin });
   }
   unregisterPosition(tradeId: string): void {
     this.tracked.delete(tradeId);
@@ -181,6 +206,7 @@ export class LiveAdapter implements ExecutionAdapter {
       const o = Order.parse(raw);
       if (t) {
         t.stopId = o.id;
+        t.stopIds.add(o.id);
         t.stopTrigger = r.triggerPrice;
       }
       return o.id;
@@ -191,7 +217,10 @@ export class LiveAdapter implements ExecutionAdapter {
   /** New stop first, then cancel the old one: the position is never unprotected. */
   async replaceStop(oldId: string, r: StopRequest): Promise<string> {
     const id = await this.placeStop(r);
-    await this.cancel(r.tradeId, oldId).catch(() => undefined);
+    // The old stop is no longer "current" but is still a trigger order: cancel it as one, and say so if that fails.
+    await this.cancel(r.tradeId, oldId).catch((e) =>
+      log.warn({ botId: this.o.botId, tradeId: r.tradeId, ex: r.exchange, orderId: oldId, err: String((e as Error).message).slice(0, 160) }, "old stop not cancelled"),
+    );
     return id;
   }
   async placeTakeProfit(r: TpRequest): Promise<string> {
@@ -207,7 +236,9 @@ export class LiveAdapter implements ExecutionAdapter {
   async cancel(tradeId: string, orderId: string): Promise<void> {
     const t = this.tracked.get(tradeId);
     if (!t) return;
-    await call(this.client(t.ctx.exchange), "cancelOrder", orderId, t.ctx.symbol, { stop: orderId === t.stopId, trigger: orderId === t.stopId });
+    const isStop = orderId === t.stopId || t.stopIds.has(orderId);
+    await call(this.client(t.ctx.exchange), "cancelOrder", orderId, t.ctx.symbol, { stop: isStop, trigger: isStop });
+    t.stopIds.delete(orderId);
     if (t.stopId === orderId) t.stopId = null;
     if (t.tpId === orderId) t.tpId = null;
   }
@@ -259,6 +290,7 @@ export class LiveAdapter implements ExecutionAdapter {
         const t = this.tracked.get(mine.tradeId);
         if (t && stop) {
           t.stopId = stop.id;
+          t.stopIds.add(stop.id);
           t.stopTrigger = D(stop.triggerPrice!);
         }
         out.push({ exchange: ex, symbol: p.symbol, qty: String(p.contracts), tradeId: mine.tradeId, status: stop ? "matched" : "missing" });

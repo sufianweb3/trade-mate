@@ -14,12 +14,19 @@ export function initialRunBalance(cfg: BotConfig): { start: string | null; unlim
   return { start: unlimited ? "0" : cfg.paperInitialFunds!, unlimited };
 }
 
+function currentConfig(store: Store, botId: string, fallback: BotConfig): BotConfig {
+  const bot = store.getBot(botId);
+  return (bot && store.getVersion(bot.current_version_id)?.config) ?? fallback;
+}
+
 /** The single mode switch in the codebase. */
 export function makeAdapterFactory(d: { store: Store; hub: MarketHub; clock: Clock; accounts: LiveAccounts }) {
   return (botId: string, cfg: BotConfig, run: RunRow): ExecutionAdapter => {
     if (cfg.mode === "live") {
       return new LiveAdapter({
-        botId, hub: d.hub, clock: d.clock, accounts: d.accounts, maxCapital: D(cfg.risk.maxCapital ?? "0"),
+        botId, hub: d.hub, clock: d.clock, accounts: d.accounts,
+        // The bot's current settings version, not the one it loaded with (saveConfig does not rebuild the adapter).
+        maxCapital: () => D(currentConfig(d.store, botId, cfg).risk.maxCapital ?? "0"),
         takerOverridePct: cfg.execution.takerFeeOverridePct,
       });
     }
