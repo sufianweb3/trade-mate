@@ -19,3 +19,4 @@ apps/desktop/dist-electron/
 *.log
 apps/desktop/.cache/
 apps/desktop/release/
+.superpowers/
