@@ -11,7 +11,7 @@ const Restrictions = z.object({
 export const binance: ExchangeQuirks = {
   ccxtId: "binanceusdm",
   options: { defaultType: "future", adjustForTimeDifference: true, recvWindow: 5000 },
-  testnet: "sandbox",
+  testnet: "demo-trading",
   needsPassphrase: false,
   stopParams: (t) => ({ reduceOnly: true, workingType: t === "mark" ? "MARK_PRICE" : "CONTRACT_PRICE" }),
   // RESULT: the order response already carries the fill, saving a REST round trip on entry.

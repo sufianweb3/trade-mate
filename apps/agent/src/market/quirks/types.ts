@@ -17,8 +17,8 @@ export interface CcxtLike {
 export interface ExchangeQuirks {
   ccxtId: string;
   options: Record<string, unknown>;
-  /** "sandbox" = ccxt setSandboxMode, "demo" = OKX demo header, null = none */
-  testnet: "sandbox" | "demo" | null;
+  /** "sandbox" = ccxt setSandboxMode, "demo-trading" = ccxt enableDemoTrading (Binance), "demo" = OKX demo header, null = none */
+  testnet: "sandbox" | "demo-trading" | "demo" | null;
   needsPassphrase: boolean;
   /** Reduce-only stop-market trigger params. */
   stopParams(trigger: "mark" | "last"): Record<string, unknown>;
@@ -33,14 +33,12 @@ export const unknownPermissions = (source: string): KeyPermissions => ({ read: n
 
 /** Point a ccxt client at the exchange's testnet / demo environment. Throws when there is none. */
 export async function applyTestnet(c: CcxtLike, q: ExchangeQuirks): Promise<void> {
-  if (q.testnet === "sandbox") {
-    try {
-      await call(c, "setSandboxMode", true);
-    } catch (e) {
-      // newer ccxt: Binance futures testnet replaced by demo trading
-      if (typeof c.enableDemoTrading === "function") await call(c, "enableDemoTrading", true);
-      else throw e;
-    }
+  if (q.testnet === "sandbox") await call(c, "setSandboxMode", true);
+  else if (q.testnet === "demo-trading") {
+    // Binance retired its futures testnet. ccxt still accepts setSandboxMode but every request then fails,
+    // so Demo Trading is selected directly.
+    if (typeof c.enableDemoTrading !== "function") throw new Error(`${c.id}: this ccxt version has no Demo Trading support`);
+    await call(c, "enableDemoTrading", true);
   } else if (q.testnet === "demo") (c as { headers?: Record<string, string> }).headers = { "x-simulated-trading": "1" };
   else throw new Error(`${c.id} has no testnet`);
 }
