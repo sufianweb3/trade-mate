@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError } from "@/lib/agent";
-import { Badge, Button, Card, cx, Empty, ErrorBox, Loading } from "./ui";
+import { Badge, Button, Card, ConfirmDialog, cx, Empty, ErrorBox, Loading } from "./ui";
 
 interface Item { id: string; label: string; ok: boolean; detail: string }
 interface Readiness { ready: boolean; exchanges: { exchange: string; ready: boolean; items: Item[] }[] }
@@ -14,7 +14,6 @@ export function RealReadiness() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const prepare = async (ex: string) => {
-    if (!confirm(`Set isolated margin, one-way mode and the Real leverage on ${ex} BTC/USDT, then read them back? These are account settings the bot sets anyway before its first order.`)) return;
     setBusy(ex);
     setMsg(null);
     try {
@@ -36,19 +35,28 @@ export function RealReadiness() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {r.exchanges.map((e) => (
-            <div key={e.exchange} className="rounded-xl border border-line p-3">
+            <div key={e.exchange} className="rounded-xl border border-border p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span className="font-semibold capitalize">{e.exchange}</span>
-                <Badge tone={e.ready ? "pos" : "neg"}>{e.ready ? "green" : "blocked"}</Badge>
+                <Badge tone={e.ready ? "pos" : "neg"}>{e.ready ? "Ready" : "Blocked"}</Badge>
                 <span className="flex-1" />
-                <Button size="sm" disabled={busy === e.exchange} onClick={() => void prepare(e.exchange)}>{busy === e.exchange ? "Checking…" : "Check & prepare"}</Button>
+                <ConfirmDialog
+                  title={`Prepare ${e.exchange}?`}
+                  body={`Sets isolated margin, one-way mode and the Real leverage on ${e.exchange} BTC/USDT, then reads them back. These are account settings the bot sets anyway before its first order.`}
+                  confirmLabel="Set and check"
+                  onConfirm={() => prepare(e.exchange)}
+                  trigger={<Button size="sm" disabled={busy === e.exchange}>{busy === e.exchange ? "Checking…" : "Check & prepare"}</Button>}
+                />
               </div>
-              <ul className="space-y-1 text-sm">
+              <ul className="divide-y divide-border text-sm">
                 {e.items.map((i) => (
-                  <li key={i.id} className="flex gap-2">
-                    <span className={cx("w-4 shrink-0 font-bold", i.ok ? "text-pos" : "text-neg")}>{i.ok ? "✓" : "✕"}</span>
-                    <span className="shrink-0">{i.label}</span>
-                    <span className="truncate text-xs text-muted" title={i.detail}>{i.detail}</span>
+                  <li key={i.id} className="flex items-center gap-2 py-1.5">
+                    <span aria-hidden className={cx("w-4 shrink-0 font-bold", i.ok ? "text-pos" : "text-neg")}>{i.ok ? "✓" : "✕"}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block">{i.label}</span>
+                      <span className="block truncate text-xs text-muted" title={i.detail}>{i.detail}</span>
+                    </span>
+                    <span className={cx("shrink-0 text-xs font-medium", i.ok ? "text-pos" : "text-neg")}>{i.ok ? "OK" : "Missing"}</span>
                   </li>
                 ))}
               </ul>

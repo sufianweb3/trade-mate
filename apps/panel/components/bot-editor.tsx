@@ -5,7 +5,7 @@ import {
 } from "@oisniper/core";
 import { useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/agent";
-import { Button, Card, cx, Field, Input, Segmented, Stepper, Switch } from "./ui";
+import { Button, Card, cx, Field, Input, Segmented, Stepper, Switch, NativeSelect } from "./ui";
 
 const OPS: { value: RuleOp; label: string }[] = [
   { value: "gte", label: "≥" }, { value: "gt", label: ">" }, { value: "lte", label: "≤" }, { value: "lt", label: "<" }, { value: "between", label: "between" },
@@ -87,9 +87,9 @@ export function BotEditor({ botId, initial, running, onSaved }: { botId: string;
             <div key={r.metric} className={cx("flex items-center gap-2 rounded-xl border border-line px-3 py-2", !r.enabled && "opacity-60")}>
               <Switch checked={r.enabled} onChange={(v) => setRule(i, { enabled: v })} label={r.metric} />
               <span className="w-24 shrink-0 whitespace-nowrap text-sm">{label(r.metric)}</span>
-              <select className="h-8 rounded-lg border border-line bg-elevated px-1 text-sm" value={r.op} onChange={(e) => setRule(i, { op: e.target.value as RuleOp, value2: e.target.value === "between" ? r.value2 ?? r.value + 1 : null })}>
+              <NativeSelect aria-label="Operator" className="h-8 px-1" value={r.op} onChange={(e) => setRule(i, { op: e.target.value as RuleOp, value2: e.target.value === "between" ? r.value2 ?? r.value + 1 : null })}>
                 {OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              </NativeSelect>
               <Input className="!h-8 w-20" type="number" step="0.01" value={r.value} onChange={(e) => setRule(i, { value: Number(e.target.value) })} />
               {r.op === "between" && <Input className="!h-8 w-20" type="number" step="0.01" value={r.value2 ?? ""} onChange={(e) => setRule(i, { value2: Number(e.target.value) })} />}
               <span className="text-xs text-muted">%</span>

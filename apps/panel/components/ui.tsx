@@ -1,5 +1,5 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 import { tone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -92,6 +92,11 @@ const field = "h-9 w-full rounded-lg border border-input bg-surface px-3 text-sm
 
 export function Input(p: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...p} className={cn(field, p.className)} />;
+}
+
+/** Native select styled with the tokens (keeps the platform picker and keyboard behaviour). */
+export function NativeSelect({ className, ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...p} className={cn(field, "w-auto pr-8", className)} />;
 }
 
 /** Numeric field with steppers. Value stays a number in the form; config strings are built at save. */

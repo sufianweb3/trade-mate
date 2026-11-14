@@ -1,7 +1,7 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Button, Card, ErrorBox, Field, Input, Loading, Segmented, Stepper } from "@/components/ui";
+import { Button, Card, ErrorBox, Field, Input, Loading, NativeSelect, Segmented, Stepper } from "@/components/ui";
 import { api, useAgent } from "@/lib/agent";
 import { TradeSettings } from "@/components/trade-settings";
 
@@ -69,9 +69,9 @@ function General() {
       <Card title="Symbol mapping overrides">
         <div className="flex flex-wrap gap-2">
           <Input className="!w-28" placeholder="CoinGlass" value={ov.coinglass} onChange={(e) => setOv({ ...ov, coinglass: e.target.value.toUpperCase() })} />
-          <select className="h-9 rounded-xl border border-line bg-elevated px-2 text-sm" value={ov.exchange} onChange={(e) => setOv({ ...ov, exchange: e.target.value })}>
+          <NativeSelect aria-label="Exchange" value={ov.exchange} onChange={(e) => setOv({ ...ov, exchange: e.target.value })}>
             {["binance", "bybit", "okx", "gate", "kucoin", "mexc"].map((x) => <option key={x}>{x}</option>)}
-          </select>
+          </NativeSelect>
           <Input className="!w-48" placeholder="1000PEPE/USDT:USDT" value={ov.unified} onChange={(e) => setOv({ ...ov, unified: e.target.value })} />
           <Button onClick={async () => { await api("/api/settings/symbol-override", { method: "PUT", json: { ...ov, unified: ov.unified || null } }); void qc.invalidateQueries({ queryKey: ["settings"] }); }}>Save</Button>
         </div>
