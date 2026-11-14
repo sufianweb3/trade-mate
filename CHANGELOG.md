@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/sufianweb3/trade-mate/compare/v0.1.1...v0.2.0) (2026-11-14)
+
+
+### Features
+
+* Apple-style redesign (mint white / charcoal) with OI Sniper pages in the sidebar ([#7](https://github.com/sufianweb3/trade-mate/issues/7)) ([b7331fc](https://github.com/sufianweb3/trade-mate/commit/b7331fccb0cffd40c086059bd0dbed5a367c9242))
+
 ## [0.1.1](https://github.com/sufianweb3/trade-mate/compare/v0.1.0...v0.1.1) (2026-11-14)
 
 
