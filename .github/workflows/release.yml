@@ -3,12 +3,17 @@
 #  2. Merging that pull request tags vX.Y.Z, creates the GitHub release as a PRE-RELEASE (Beta channel only),
 #     builds the Windows and macOS installers and attaches them.
 #  3. You test the beta, then untick "Set as a pre-release" on GitHub to ship it to the Stable channel.
+# Rebuild the installers of an existing release: Actions -> Release -> Run workflow -> tag (e.g. v0.1.0).
 name: Release
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)build installers for, e.g. v0.1.0"
+        required: true
 
 permissions:
   contents: write
@@ -20,6 +25,7 @@ env:
 
 jobs:
   release-please:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
@@ -30,25 +36,46 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      # Pull requests opened by the Actions token do not trigger CI on their own; start it so the checks can pass.
-      - name: Run CI on the release pull request
-        if: ${{ steps.rp.outputs.pr }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
-        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
       # New versions always start on Beta. Stable users only get them after you promote the release.
       - name: Mark as pre-release (Beta)
-        if: ${{ steps.rp.outputs.release_created }}
+        if: ${{ steps.rp.outputs.release_created == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.rp.outputs.tag_name }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+      # Pull requests opened by the Actions token do not trigger CI on their own; start it so the checks can pass.
+      # The PR JSON is read in the shell (not with fromJSON in the template), so a missing PR can never break the run.
+      - name: Run CI on the release pull request
+        if: ${{ steps.rp.outputs.prs_created == 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_JSON: ${{ steps.rp.outputs.pr }}
+        run: |
+          BRANCH=$(printf '%s' "$PR_JSON" | jq -r '.headBranchName // empty')
+          if [ -n "$BRANCH" ]; then gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"; else echo "no release PR branch"; fi
+
+  target:
+    needs: release-please
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.release_created == 'true') }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+    steps:
+      - id: t
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          CREATED_TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          TAG="${INPUT_TAG:-$CREATED_TAG}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
   build:
     name: Installers (${{ matrix.name }})
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    needs: target
+    if: ${{ always() && needs.target.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.target.outputs.tag }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -87,5 +114,5 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.target.outputs.tag }}
         run: gh release upload "$TAG" ${{ matrix.files }} --repo "$GITHUB_REPOSITORY" --clobber
