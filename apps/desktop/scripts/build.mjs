@@ -19,6 +19,8 @@ await build({ ...common, entryPoints: [join(root, "src/renderer/app.ts")], outfi
 
 cpSync(join(root, "src/renderer/index.html"), join(out, "renderer/index.html"));
 cpSync(join(root, "src/renderer/styles.css"), join(out, "renderer/styles.css"));
+// Shared design tokens (mint white / charcoal), the same file the OI Sniper panel uses.
+cpSync(join(root, "..", "..", "packages/design/tokens.css"), join(out, "renderer/tokens.css"));
 const icon = join(root, "build/icon.png");
 if (!existsSync(icon)) throw new Error("build/icon.png is missing: run `pnpm --filter desktop icon`");
 cpSync(icon, join(out, "assets/icon.png"));

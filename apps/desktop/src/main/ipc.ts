@@ -30,6 +30,7 @@ export function registerIpc(c: Controller): void {
   handle(IPC.openLogsFolder, () => shell.openPath(logsDir()));
   handle(IPC.copyDiagnostics, () => clipboard.writeText(JSON.stringify(c.diagnostics(), null, 2)));
   handle(IPC.setLaunchAtLogin, (on) => c.setLaunchAtLogin(z.boolean().parse(on)));
+  handle(IPC.setAppearance, (a) => c.setAppearance(z.enum(["system", "light", "dark"]).parse(a)));
   handle(IPC.setChannel, (ch) => c.setChannel(channel.parse(ch)));
   handle(IPC.checkForUpdates, () => c.updates.check());
   handle(IPC.downloadUpdate, () => c.downloadUpdate());

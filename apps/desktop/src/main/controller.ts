@@ -1,5 +1,5 @@
-import { app, dialog, Notification, shell } from "electron";
-import type { Channel, ShellState, ViewName } from "../shared/types";
+import { app, dialog, nativeTheme, Notification, shell } from "electron";
+import { isPanelView, type Appearance, type Channel, type ShellState, type ViewName } from "../shared/types";
 import { AgentSupervisor } from "./agentSupervisor";
 import { errorBox } from "./ipc";
 import { log, logsDir } from "./logger";
@@ -19,7 +19,9 @@ export class Controller {
   private quitting = false;
 
   async init(startHidden: boolean): Promise<void> {
+    nativeTheme.themeSource = this.settings.appearance;
     this.window = new ShellWindow(this.agent.port);
+    this.window.onPanelRoute = () => this.broadcast();
     if (startHidden) this.window.win.once("show", () => this.window?.win.hide());
     this.tray = new AppTray({ open: () => this.show(), checkUpdates: () => this.showUpdates(), quit: () => app.quit() });
 
@@ -37,7 +39,7 @@ export class Controller {
     });
     this.agent.on("ready", (url) => {
       // First start opens the pairing link; later the panel keeps its own stored token and reconnects by itself.
-      if (!this.window?.isPanelLoaded) void this.window?.loadPanel(url);
+      if (!this.window?.isPanelLoaded) void this.window?.loadPanel(withEmbed(url));
     });
     this.updates.on("state", (s) => {
       if (s.status === "available" && s.availableVersion && Notification.isSupported()) {
@@ -70,7 +72,7 @@ export class Controller {
       agent: this.agent.state,
       update: this.updates.state,
       settings: this.settings,
-      view: this.window?.view ?? "panel",
+      view: this.window?.view ?? "overview",
     };
   }
 
@@ -80,8 +82,15 @@ export class Controller {
   }
 
   navigate(v: ViewName): void {
-    this.window?.setView(v);
+    if (isPanelView(v)) this.window?.openRoute(v);
+    else this.window?.setView(v);
     this.broadcast();
+  }
+
+  /** Light / Dark / Match system: drives prefers-color-scheme for the frame and the panel. */
+  setAppearance(a: Appearance): void {
+    nativeTheme.themeSource = a;
+    this.save({ appearance: a });
   }
 
   show(): void {
@@ -201,4 +210,11 @@ export class Controller {
     const wc = this.window?.shellView.webContents;
     if (wc && !wc.isDestroyed()) wc.send("shell:state", this.snapshot());
   }
+}
+
+/** The panel hides its own top bar inside the desktop app (?embed=desktop); the pairing hash stays last. */
+export function withEmbed(url: string): string {
+  const u = new URL(url);
+  u.searchParams.set("embed", "desktop");
+  return u.toString();
 }

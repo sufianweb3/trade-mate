@@ -34,7 +34,13 @@ export function icon(paths: string[]): SVGSVGElement {
 }
 
 export const ICONS = {
-  panel: ["M3 3h7v9H3z", "M14 3h7v5h-7z", "M14 12h7v9h-7z", "M3 16h7v5H3z"],
+  overview: ["M3 3h7v9H3z", "M14 3h7v5h-7z", "M14 12h7v9h-7z", "M3 16h7v5H3z"],
+  signals: ["M3 12h4l3-8 4 16 3-8h4"],
+  history: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 7v5l3 2"],
+  analytics: ["M4 20V11", "M10 20V5", "M16 20v-6", "M21 20H3"],
+  exchanges: ["M7 7h13", "M17 4l3 3-3 3", "M17 17H4", "M7 14l-3 3 3 3"],
+  health: ["M3 12h4l2-5 4 10 2-5h6"],
+  settings: ["M4 21v-7", "M4 10V3", "M12 21v-9", "M12 8V3", "M20 21v-5", "M20 12V3", "M2 14h4", "M10 8h4", "M18 16h4"],
   updates: ["M21 12a9 9 0 1 1-3-6.7", "M21 3v6h-6", "M12 8v5l3 2"],
   support: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4", "M12 17h.01"],
   about: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 11v5", "M12 8h.01"],

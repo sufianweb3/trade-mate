@@ -120,6 +120,18 @@ export function supportPage(s: ShellState, api: ShellApi): HTMLElement {
     ),
     h("p", { class: "note" }, "Diagnostics hold versions and status only, no keys or tokens. Paste them when you report a problem."),
   );
+  const look = (a: "system" | "light" | "dark", label: string) =>
+    h("button", { "aria-pressed": String(s.settings.appearance === a), onclick: () => void api.setAppearance(a) }, label);
+  const appearance = h(
+    "div",
+    { class: "card" },
+    h(
+      "div",
+      { class: "toggle" },
+      h("div", {}, h("h3", {}, "Appearance"), h("p", { class: "note" }, "Mint white or charcoal, for Trade Mate and the OI Sniper pages.")),
+      h("div", { class: "seg", role: "group", "aria-label": "Appearance" }, look("light", "Light"), look("dark", "Dark"), look("system", "Match system")),
+    ),
+  );
   const startup = h(
     "div",
     { class: "card" },
@@ -130,7 +142,7 @@ export function supportPage(s: ShellState, api: ShellApi): HTMLElement {
       h("input", { type: "checkbox", checked: s.settings.launchAtLogin, onchange: (e) => void api.setLaunchAtLogin((e.target as HTMLInputElement).checked) }),
     ),
   );
-  return h("div", { class: "page-inner" }, engine, startup);
+  return h("div", { class: "page-inner" }, engine, appearance, startup);
 }
 
 function copy(e: Event, api: ShellApi): void {

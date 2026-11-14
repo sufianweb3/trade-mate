@@ -1,4 +1,4 @@
-import type { AgentState, ShellApi, ShellState, ViewName } from "../shared/types";
+import { isPanelView, type AgentState, type ShellApi, type ShellState, type ViewName } from "../shared/types";
 import { fmtUptime, h, icon, ICONS } from "./dom";
 import { aboutPage, supportPage, updatesPage, type VersionsCache } from "./pages";
 
@@ -13,12 +13,27 @@ const $ = (id: string) => document.getElementById(id)!;
 let state: ShellState | null = null;
 const versions: VersionsCache = { items: null, error: null, loading: false };
 
-const NAV: { view: ViewName; label: string; title: string; subtitle: string }[] = [
-  { view: "panel", label: "Dashboard", title: "Dashboard", subtitle: "Bots, signals, positions and history" },
-  { view: "updates", label: "Updates", title: "Updates", subtitle: "Versions, channel and rollback" },
-  { view: "support", label: "Support", title: "Support", subtitle: "Engine status, logs and startup" },
-  { view: "about", label: "About", title: "About", subtitle: "Versions and project" },
+interface NavItem { view: ViewName; label: string; subtitle?: string }
+/** Sidebar: the OI Sniper pages (shown by the panel, which has its own page header), then the app pages. */
+const NAV: { group: string; items: NavItem[] }[] = [
+  {
+    group: "OI Sniper",
+    items: [
+      { view: "overview", label: "Overview" }, { view: "signals", label: "Signals" }, { view: "history", label: "History" },
+      { view: "analytics", label: "Analytics" }, { view: "exchanges", label: "Exchanges" }, { view: "health", label: "Health" },
+      { view: "settings", label: "Settings" },
+    ],
+  },
+  {
+    group: "App",
+    items: [
+      { view: "updates", label: "Updates", subtitle: "Versions, channel and rollback" },
+      { view: "support", label: "Support", subtitle: "Engine, logs, startup and appearance" },
+      { view: "about", label: "About", subtitle: "Versions and project" },
+    ],
+  },
 ];
+const ALL = NAV.flatMap((g) => g.items);
 
 const TONE: Record<AgentState["status"], "ok" | "warn" | "bad" | ""> = {
   running: "ok",
@@ -42,21 +57,26 @@ const LABEL: Record<AgentState["status"], string> = {
 function render(s: ShellState): void {
   const prevView = state?.view;
   state = s;
-  const meta = NAV.find((n) => n.view === s.view)!;
-  $("title").textContent = meta.title;
-  $("subtitle").textContent = meta.subtitle;
+  const meta = ALL.find((n) => n.view === s.view) ?? ALL[0]!;
+  const onPanel = isPanelView(s.view);
+  $("topbar").hidden = onPanel; // panel pages carry their own header
+  $("title").textContent = meta.label;
+  $("subtitle").textContent = meta.subtitle ?? "";
 
   const updateBadge = s.update.status === "available" || s.update.status === "downloaded";
   $("nav").replaceChildren(
-    ...NAV.map((n) =>
-      h(
-        "button",
-        { "aria-current": n.view === s.view ? "page" : undefined, onclick: () => void api.navigate(n.view) },
-        icon(ICONS[n.view]),
-        n.label,
-        n.view === "updates" && updateBadge ? h("span", { class: "badge" }, "1") : null,
+    ...NAV.flatMap((g) => [
+      h("div", { class: "nav-group" }, g.group),
+      ...g.items.map((n) =>
+        h(
+          "button",
+          { "aria-current": n.view === s.view ? "page" : undefined, onclick: () => void api.navigate(n.view) },
+          icon(ICONS[n.view]),
+          n.label,
+          n.view === "updates" && updateBadge ? h("span", { class: "badge", "aria-label": "update available" }, "1") : null,
+        ),
       ),
-    ),
+    ]),
   );
 
   const tone = TONE[s.agent.status];
@@ -66,14 +86,7 @@ function render(s: ShellState): void {
   );
   $("version").textContent = `v${s.app.version} · ${s.settings.channel === "beta" ? "Beta" : "Stable"}${s.app.packaged ? "" : " · dev"}`;
 
-  $("topbar-right").replaceChildren(
-    updateBadge
-      ? h("span", { class: "pill accent", role: "button", onclick: () => void api.navigate("updates") }, `Update ${s.update.availableVersion ?? ""} available`)
-      : "",
-    h("span", { class: `pill ${tone}` }, h("span", { class: `dot ${tone}` }), LABEL[s.agent.status]),
-  );
 
-  const onPanel = s.view === "panel";
   $("panel-host").hidden = !onPanel;
   const page = $("page");
   page.hidden = onPanel;
@@ -135,5 +148,5 @@ api.onState((s) => {
   render(s);
   if (channelChanged && s.view === "updates") void loadVersions();
 });
-setInterval(() => state && state.agent.status === "running" && state.view === "panel" && render(state), 60_000);
+setInterval(() => state && state.agent.status === "running" && isPanelView(state.view) && render(state), 60_000);
 void api.getState().then(render);

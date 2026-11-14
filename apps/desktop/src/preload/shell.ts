@@ -16,6 +16,7 @@ const api: ShellApi = {
   openLogsFolder: () => ipcRenderer.invoke(IPC.openLogsFolder),
   copyDiagnostics: () => ipcRenderer.invoke(IPC.copyDiagnostics),
   setLaunchAtLogin: (on) => ipcRenderer.invoke(IPC.setLaunchAtLogin, on),
+  setAppearance: (a) => ipcRenderer.invoke(IPC.setAppearance, a),
   setChannel: (c) => ipcRenderer.invoke(IPC.setChannel, c),
   checkForUpdates: () => ipcRenderer.invoke(IPC.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate),
