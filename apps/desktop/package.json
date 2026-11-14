@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "productName": "Trade Mate",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Trade Mate desktop app: runs the OI Sniper agent and panel locally on Windows and macOS.",
   "author": "sufianweb3",
