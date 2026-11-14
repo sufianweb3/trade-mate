@@ -1,0 +1,91 @@
+# Release flow (see docs/RELEASING.md):
+#  1. Every merge to main updates a "chore(main): release x.y.z" pull request (version + CHANGELOG from commit messages).
+#  2. Merging that pull request tags vX.Y.Z, creates the GitHub release as a PRE-RELEASE (Beta channel only),
+#     builds the Windows and macOS installers and attaches them.
+#  3. You test the beta, then untick "Set as a pre-release" on GitHub to ship it to the Stable channel.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+env:
+  NODE_VERSION: "26.13.0"
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      # Pull requests opened by the Actions token do not trigger CI on their own; start it so the checks can pass.
+      - name: Run CI on the release pull request
+        if: ${{ steps.rp.outputs.pr }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+      # New versions always start on Beta. Stable users only get them after you promote the release.
+      - name: Mark as pre-release (Beta)
+        if: ${{ steps.rp.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+
+  build:
+    name: Installers (${{ matrix.name }})
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            stage: win-x64
+            builder: --win --x64
+            files: apps/desktop/release/*.exe apps/desktop/release/*.exe.blockmap apps/desktop/release/latest.yml
+          - name: macOS
+            os: macos-latest
+            stage: mac-arm64 mac-x64
+            builder: --mac --arm64 --x64
+            files: apps/desktop/release/*.dmg apps/desktop/release/*.zip apps/desktop/release/*.blockmap apps/desktop/release/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm --filter desktop build:shell
+      - run: node apps/desktop/scripts/stage-agent.mjs ${{ matrix.stage }}
+      - run: pnpm --filter desktop exec electron-builder --publish never ${{ matrix.builder }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Attach installers to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG" ${{ matrix.files }} --repo "$GITHUB_REPOSITORY" --clobber

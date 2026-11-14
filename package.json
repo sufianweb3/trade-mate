@@ -15,7 +15,9 @@
     "demo": "pnpm --filter agent demo",
     "demo:scenarios": "pnpm --filter agent demo:scenarios",
     "db:generate": "pnpm --filter agent db:generate",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "desktop:dev": "pnpm --filter desktop dev",
+    "desktop:dist": "pnpm build && pnpm --filter desktop dist"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -26,6 +28,6 @@
     "vitest": "^3.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "@napi-rs/keyring"]
+    "onlyBuiltDependencies": ["esbuild", "@napi-rs/keyring", "electron"]
   }
 }

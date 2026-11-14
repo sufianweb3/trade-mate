@@ -1,0 +1,57 @@
+# Trade Mate installers. Built by .github/workflows/release.yml on a version tag; locally with `pnpm desktop:dist`.
+appId: com.sufianweb3.trademate
+productName: Trade Mate
+copyright: Copyright © 2026 sufianweb3
+directories:
+  output: release
+  buildResources: build
+# The shell is fully bundled by scripts/build.mjs: no node_modules go into the app.
+files:
+  - dist-electron/**
+  - package.json
+extraResources:
+  # Unchanged OI Sniper agent + panel + Node runtime for this OS/arch (scripts/stage-agent.mjs)
+  - from: staging/${os}-${arch}
+    to: agent
+    filter: ["**/*"]
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+electronLanguages: [en-US]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: Trade-Mate-Setup-${version}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Trade Mate
+  runAfterFinish: true
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  icon: build/icon.png
+  category: public.app-category.finance
+  # Ad-hoc signature until an Apple Developer ID is added (see docs/RELEASING.md).
+  identity: "-"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: Trade-Mate-${version}-${arch}.${ext}
+dmg:
+  artifactName: Trade-Mate-${version}-${arch}.${ext}
+
+publish:
+  provider: github
+  owner: sufianweb3
+  repo: trade-mate
+  releaseType: release
