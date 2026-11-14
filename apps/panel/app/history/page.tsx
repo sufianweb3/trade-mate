@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
-import { Card, Empty, ErrorBox, Input, Loading, ModeBadge, Segmented, Signed, StatusBadge, Table, Td } from "@/components/ui";
+import { Card, Empty, ErrorBox, Input, Loading, ModeBadge, rowProps, Segmented, Signed, StatusBadge, Table, Td } from "@/components/ui";
 import { ExportButton } from "@/components/export-button";
 import { api } from "@/lib/agent";
 import { useRunParam, ViewSelect } from "@/components/bot-controls";
@@ -63,12 +63,12 @@ export default function History() {
         <Table head={["Opened", "Bot", "Symbol", "Venue", "Variant", "Mode", "Status", "Exit", "Entry", "Net PnL", "ROE", "Hold"]}>
           {q.data.map((t) => (
             <Fragment key={t.trade_id}>
-              <tr className="cursor-pointer hover:bg-elevated" onClick={() => setOpen(open === t.trade_id ? null : t.trade_id)}>
+              <tr {...rowProps(() => setOpen(open === t.trade_id ? null : t.trade_id))} aria-expanded={open === t.trade_id}>
                 <Td>{time(t.timing.entry_fill_time)}</Td><Td>{t.bot_id}</Td><Td className="font-medium">{t.symbol}</Td><Td>{t.exchange}</Td><Td>{t.variant_id}{t.config.fitted ? <span className="text-muted"> → {t.config.leverage}x</span> : null}</Td>
-                <Td><ModeBadge mode={t.mode} /></Td><Td><StatusBadge s={t.status} /></Td><Td>{t.exit.reason ?? "—"}</Td><Td>{price(t.execution.avg_entry_price)}</Td>
-                <Td><Signed v={t.result.net_pnl} fmt={(v) => usd(v, true)} /></Td><Td><Signed v={t.result.net_roe_pct} fmt={(v) => pct(v, 1)} /></Td><Td>{dur(t.timing.hold_seconds)}</Td>
+                <Td><ModeBadge mode={t.mode} /></Td><Td><StatusBadge s={t.status} /></Td><Td>{t.exit.reason ?? "—"}</Td><Td num>{price(t.execution.avg_entry_price)}</Td>
+                <Td num><Signed v={t.result.net_pnl} fmt={(v) => usd(v, true)} /></Td><Td num><Signed v={t.result.net_roe_pct} fmt={(v) => pct(v, 1)} /></Td><Td num>{dur(t.timing.hold_seconds)}</Td>
               </tr>
-              {open === t.trade_id && <tr><td colSpan={12} className="bg-elevated p-4"><Detail id={t.trade_id} /></td></tr>}
+              {open === t.trade_id && <tr><td colSpan={12} className="bg-secondary/60 p-4"><Detail id={t.trade_id} /></td></tr>}
             </Fragment>
           ))}
         </Table>

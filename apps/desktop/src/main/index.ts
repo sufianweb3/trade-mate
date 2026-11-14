@@ -37,7 +37,7 @@ function buildMenu(c: Controller): Menu {
     {
       label: "View",
       submenu: [
-        { label: "Dashboard", accelerator: "CmdOrCtrl+1", click: () => c.navigate("panel") },
+        { label: "Overview", accelerator: "CmdOrCtrl+1", click: () => c.navigate("overview") },
         { label: "Updates", accelerator: "CmdOrCtrl+2", click: () => c.navigate("updates") },
         { label: "Support", accelerator: "CmdOrCtrl+3", click: () => c.navigate("support") },
         { type: "separator" },

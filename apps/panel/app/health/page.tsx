@@ -35,7 +35,7 @@ export default function Health() {
       <Card title="Signal latency (p50 / p95)" action={<span className="text-xs text-muted">Last 500 trades and 2000 signals; paper latency is simulated from measured live latency</span>}>
         {["live", "paper"].map((m) => (lat.data?.[m] ?? []).some((x) => x.n) ? (
           <div key={m} className="mb-3">
-            <div className="mb-1 text-xs font-semibold uppercase text-muted">{m}</div>
+            <div className="mb-1 text-xs font-semibold text-muted">{m === "live" ? "Live" : "Paper"}</div>
             <Table head={["Stage", "n", "p50", "p95", "Target"]}>
               {lat.data![m]!.map((x) => <tr key={x.stage}><Td>{x.stage}</Td><Td>{x.n}</Td><Td>{x.p50 == null ? "—" : `${x.p50} ms`}</Td><Td>{x.p95 == null ? "—" : `${x.p95} ms`}</Td><Td className="text-muted">{x.target ?? ""}</Td></tr>)}
             </Table>

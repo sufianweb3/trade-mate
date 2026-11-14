@@ -1,7 +1,15 @@
 /** State and calls shared by the main process, the preload bridge and the shell UI. */
 
-export type ViewName = "panel" | "updates" | "support" | "about";
-export const VIEWS: readonly ViewName[] = ["panel", "updates", "support", "about"];
+import type { PanelView } from "../main/pure/panelRoutes";
+
+export type { PanelView };
+/** Sidebar items: the seven OI Sniper panel pages, then the app's own pages. */
+export type ViewName = PanelView | "updates" | "support" | "about";
+export const APP_VIEWS = ["updates", "support", "about"] as const;
+export const VIEWS: readonly ViewName[] = ["overview", "signals", "history", "analytics", "exchanges", "health", "settings", ...APP_VIEWS];
+export const isPanelView = (v: ViewName): v is PanelView => !(APP_VIEWS as readonly string[]).includes(v);
+
+export type Appearance = "system" | "light" | "dark";
 
 export type AgentStatus = "starting" | "running" | "restarting" | "stopping" | "stopped" | "error" | "conflict";
 
@@ -47,6 +55,7 @@ export interface Settings {
   channel: Channel;
   launchAtLogin: boolean;
   trayHintShown: boolean;
+  appearance: Appearance;
 }
 
 export interface ShellState {
@@ -86,6 +95,7 @@ export interface ShellApi {
   openLogsFolder(): Promise<void>;
   copyDiagnostics(): Promise<void>;
   setLaunchAtLogin(on: boolean): Promise<void>;
+  setAppearance(a: Appearance): Promise<void>;
   setChannel(c: Channel): Promise<void>;
   checkForUpdates(): Promise<void>;
   downloadUpdate(): Promise<void>;
@@ -105,6 +115,7 @@ export const IPC = {
   openLogsFolder: "support:open-logs",
   copyDiagnostics: "support:copy-diagnostics",
   setLaunchAtLogin: "settings:launch-at-login",
+  setAppearance: "settings:appearance",
   setChannel: "updates:set-channel",
   checkForUpdates: "updates:check",
   downloadUpdate: "updates:download",

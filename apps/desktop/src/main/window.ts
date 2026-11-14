@@ -1,7 +1,8 @@
 import { BaseWindow, WebContentsView, nativeTheme, session, shell } from "electron";
 import { join } from "node:path";
-import type { Rect, ViewName } from "../shared/types";
+import { isPanelView, type PanelView, type Rect, type ViewName } from "../shared/types";
 import { assetPath } from "./paths";
+import { navigateScript, nextRoute, viewForUrl } from "./pure/panelRoutes";
 import { isAgentUrl, isSafeExternalUrl } from "./pure/urlGuard";
 import { log } from "./logger";
 
@@ -17,8 +18,12 @@ export class ShellWindow {
   readonly panelView: WebContentsView;
   private panelBounds: Rect = { x: 0, y: 0, width: 0, height: 0 };
   private panelLoaded = false;
-  view: ViewName = "panel";
+  view: ViewName = "overview";
   agentReady = false;
+  /** Sidebar item clicked while the panel was not ready; opened once it is. */
+  private pendingView: PanelView | null = null;
+  /** Called when the panel moves to another page by itself (an in-page link): the sidebar highlight follows. */
+  onPanelRoute: (v: PanelView) => void = () => undefined;
 
   constructor(private readonly port: number) {
     this.win = new BaseWindow({
@@ -28,7 +33,7 @@ export class ShellWindow {
       minHeight: 680,
       title: "Trade Mate",
       show: false,
-      backgroundColor: nativeTheme.shouldUseDarkColors ? "#0b0f17" : "#f6f7fb",
+      backgroundColor: nativeTheme.shouldUseDarkColors ? "#141617" : "#f3faf6",
       icon: assetPath("icon.png"),
       autoHideMenuBar: true,
     });
@@ -52,10 +57,19 @@ export class ShellWindow {
       if (isSafeExternalUrl(url)) void shell.openExternal(url);
       return { action: "deny" };
     });
+    const follow = (_e: unknown, url: string) => {
+      const v = viewForUrl(url, this.port);
+      if (v && v !== this.view) {
+        this.view = v;
+        this.onPanelRoute(v);
+      }
+    };
+    wc.on("did-navigate-in-page", follow);
+    wc.on("did-navigate", follow);
     wc.on("render-process-gone", (_e, d) => {
       log.error("panel renderer gone", d.reason);
       this.panelLoaded = false;
-      if (this.agentReady) void this.loadPanel(`http://localhost:${this.port}/`);
+      if (this.agentReady) void this.loadPanel(`http://localhost:${this.port}/?embed=desktop`);
     });
     this.panelView.setVisible(false);
     this.win.contentView.addChildView(this.panelView);
@@ -70,10 +84,25 @@ export class ShellWindow {
     try {
       await this.panelView.webContents.loadURL(url);
       this.panelLoaded = true;
+      const target = nextRoute(this.pendingView, isPanelView(this.view) ? this.view : null);
+      this.pendingView = null;
+      if (target !== viewForUrl(this.panelView.webContents.getURL(), this.port)) this.navigatePanel(target);
     } catch (e) {
       log.error("panel load failed", (e as Error).message);
     }
     this.syncPanel();
+  }
+
+  /** Sidebar click on an OI Sniper page: route the panel (client-side, no reload), or remember it until ready. */
+  openRoute(v: PanelView): void {
+    this.view = v;
+    if (this.panelLoaded && this.agentReady) this.navigatePanel(v);
+    else this.pendingView = v;
+    this.syncPanel();
+  }
+
+  private navigatePanel(v: PanelView): void {
+    void this.panelView.webContents.executeJavaScript(navigateScript(v)).catch((e) => log.warn("panel navigate failed", (e as Error).message));
   }
 
   get isPanelLoaded(): boolean {
@@ -92,6 +121,11 @@ export class ShellWindow {
 
   setAgentReady(ready: boolean): void {
     this.agentReady = ready;
+    // An item clicked while the engine was restarting opens now (the panel itself stayed loaded).
+    if (ready && this.panelLoaded && this.pendingView) {
+      this.navigatePanel(this.pendingView);
+      this.pendingView = null;
+    }
     this.syncPanel();
   }
 
@@ -106,7 +140,7 @@ export class ShellWindow {
   }
 
   private syncPanel(): void {
-    const visible = this.view === "panel" && this.agentReady && this.panelLoaded && this.panelBounds.width > 0;
+    const visible = isPanelView(this.view) && this.agentReady && this.panelLoaded && this.panelBounds.width > 0;
     const b = this.panelBounds;
     this.panelView.setBounds({ x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) });
     this.panelView.setVisible(visible);

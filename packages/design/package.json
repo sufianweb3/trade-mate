@@ -1,0 +1,9 @@
+{
+  "name": "@trademate/design",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Trade Mate design tokens (mint white / charcoal), shared by the panel and the desktop frame.",
+  "exports": { "./tokens.css": "./tokens.css" },
+  "scripts": { "test": "vitest run" }
+}

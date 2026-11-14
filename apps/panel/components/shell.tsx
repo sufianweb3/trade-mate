@@ -4,29 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, connect, useAgent } from "@/lib/agent";
-import type { BotResp, StateResp } from "@/lib/types";
-import { HeaderModeToggle } from "./bot-controls";
+import { useDesktopBridge, useEmbedded } from "@/lib/embed";
+import type { StateResp } from "@/lib/types";
 import { useView } from "@/lib/view";
-import { Button, Card, cx, Input, StatusBadge } from "./ui";
+import { PageHeader } from "./page-header";
+import { Button, Card, cx, Input } from "./ui";
 
-const NAV = [
+export const NAV = [
   ["/", "Overview"], ["/signals/", "Signals"], ["/history/", "History"],
   ["/analytics/", "Analytics"], ["/exchanges/", "Exchanges"], ["/health/", "Health"], ["/settings/", "Settings"],
 ] as const;
 
-/** Header status of the signal sources the bots actually use (an unused source's state would only confuse). */
-function SourceBadges({ s }: { s: StateResp }) {
-  const bots = useQuery({ queryKey: ["bots"], queryFn: () => api<BotResp[]>("/api/bots") });
-  // Real counts only while it runs (it is on hold by default); Paper and Test always count.
-  const used = (bots.data ?? []).filter((b) => b.config.mode !== "live" || b.running);
-  const kinds = new Set(used.map((b) => b.config.dataSource?.kind ?? "coinglass"));
-  if (!bots.data) kinds.add("coinglass");
-  return (
-    <span className="hidden md:inline-flex items-center gap-3 text-xs text-muted">
-      {kinds.has("coinglass") && <span className="inline-flex items-center gap-1.5">CoinGlass <StatusBadge s={s.scraper.status} /></span>}
-      {kinds.has("exchange") && <span className="inline-flex items-center gap-1.5">Exchange data <StatusBadge s={s.exchangeData?.status ?? "DOWN"} /></span>}
-    </span>
-  );
+const ROUTES: readonly string[] = NAV.map(([href]) => href);
+
+/** Page title for a route (the panel's own pages; anything else falls back to the app name). */
+export function titleFor(path: string | null): string {
+  const p = !path || path === "/" ? "/" : path.endsWith("/") ? path : `${path}/`;
+  return NAV.find(([href]) => (href === "/" ? p === "/" : p.startsWith(href)))?.[1] ?? "OI Sniper";
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -69,6 +63,7 @@ function Gate({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const state = useAgent((s) => s.state);
   const hydrate = useView((s) => s.hydrate);
+  useDesktopBridge(ROUTES);
   useEffect(() => {
     hydrate();
     const theme = (() => { try { return localStorage.getItem("oisniper.theme"); } catch { return null; } })();
@@ -131,37 +126,33 @@ function Onboarding() {
   );
 }
 
-function Shell({ children }: { children: ReactNode }) {
+/** Desktop (embedded): page header only, the Trade Mate sidebar navigates. Browser: a links-only bar on top. */
+export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
+  const embedded = useEmbedded();
   const st = useQuery({ queryKey: ["state"], queryFn: () => api<StateResp>("/api/state") });
-  const [confirmKill, setConfirmKill] = useState(false);
-  const qc = useQueryClient();
   const s = st.data;
+  const active = (href: string) => (href === "/" ? path === "/" : path?.startsWith(href.slice(0, -1)));
   return (
     <div className="min-h-screen">
-      {s?.liveRunning && <div className="bg-live px-4 py-1.5 text-center text-xs font-semibold uppercase tracking-wider text-white">Live trading active: real orders with real money</div>}
-      <header className="sticky top-0 z-30 border-b border-line/60 bg-bg/75 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
-          <span className="font-semibold tracking-tight">OI Sniper</span>
-          <HeaderModeToggle />
-          <nav className="flex flex-1 gap-0.5 overflow-x-auto text-sm">
-            {NAV.map(([href, label]) => (
-              <Link key={href} href={href} className={cx("whitespace-nowrap rounded-lg px-2.5 py-1", (href === "/" ? path === "/" : path?.startsWith(href.slice(0, -1))) ? "bg-line/60 font-medium" : "text-muted hover:text-fg")}>{label}</Link>
-            ))}
-          </nav>
-          {s && <SourceBadges s={s} />}
-          {confirmKill ? (
-            <span className="flex items-center gap-1">
-              <Button size="sm" variant="danger" onClick={async () => { await api("/api/kill-switch", { method: "POST", json: { confirm: true } }); setConfirmKill(false); void qc.invalidateQueries(); }}>Close all + stop</Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmKill(false)}>Cancel</Button>
-            </span>
-          ) : (
-            <Button size="sm" variant="danger" onClick={() => setConfirmKill(true)} title="Stop all bots, cancel orders, market-close all positions">Kill switch</Button>
-          )}
-        </div>
-      </header>
-      {s?.killSwitch && <div className="bg-neg/15 px-4 py-1.5 text-center text-xs text-neg">Kill switch engaged. Start a bot to release it.</div>}
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      {!embedded && (
+        <nav aria-label="Pages" className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
+            <span className="font-semibold tracking-tight">OI Sniper</span>
+            <div className="flex flex-1 gap-0.5 overflow-x-auto text-sm">
+              {NAV.map(([href, label]) => (
+                <Link key={href} href={href} className={cx("whitespace-nowrap rounded-lg px-2.5 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", active(href) ? "bg-accent/12 font-medium text-accent" : "text-muted hover:text-foreground")}>{label}</Link>
+              ))}
+            </div>
+          </div>
+        </nav>
+      )}
+      {s?.liveRunning && <div role="status" className="bg-live px-4 py-1.5 text-center text-xs font-semibold text-white">Live trading active: real orders with real money</div>}
+      {s?.killSwitch && <div role="status" className="bg-neg/12 px-4 py-1.5 text-center text-xs text-neg">Kill switch engaged. Start a bot to release it.</div>}
+      <main className="mx-auto max-w-7xl px-5 py-5">
+        <PageHeader title={titleFor(path)} />
+        {children}
+      </main>
     </div>
   );
 }

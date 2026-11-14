@@ -1,32 +1,30 @@
 "use client";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { tone } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "./ui/alert-dialog";
+import { ShadButton, type ButtonProps } from "./ui/button";
+import { ShadSwitch } from "./ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
-/** shadcn-style primitives, Tailwind tokens only. */
-export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
+/**
+ * The panel's component API (unchanged names and props), built on shadcn/ui and the Trade Mate tokens
+ * (packages/design/tokens.css). Pages import only from here.
+ */
+export const cx = (...c: (string | false | null | undefined)[]) => cn(...c);
 
-export function Button({ variant = "default", size = "md", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "primary" | "danger" | "ghost"; size?: "sm" | "md" }) {
-  return (
-    <button
-      {...p}
-      className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
-        size === "sm" ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm",
-        variant === "primary" && "bg-accent text-white hover:bg-accent/90",
-        variant === "danger" && "bg-neg text-white hover:bg-neg/90",
-        variant === "ghost" && "text-fg hover:bg-line/50",
-        variant === "default" && "bg-elevated border border-line text-fg hover:bg-line/40",
-        className,
-      )}
-    />
-  );
+export function Button({ variant = "default", size = "md", ...p }: Omit<ButtonProps, "variant" | "size"> & { variant?: "default" | "primary" | "danger" | "ghost"; size?: "sm" | "md" }) {
+  return <ShadButton variant={variant} size={size} {...p} />;
 }
 
 export function Card({ title, action, children, className }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx("rounded-2xl bg-surface border border-line/70 shadow-soft p-5", className)}>
+    <section className={cn("rounded-2xl border border-border bg-card p-5 text-card-foreground", className)}>
       {(title || action) && (
-        <header className="mb-4 flex items-center justify-between gap-3">
+        <header className="mb-3 flex items-center justify-between gap-3">
           {title && <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>}
           {action}
         </header>
@@ -36,55 +34,83 @@ export function Card({ title, action, children, className }: { title?: ReactNode
   );
 }
 
-export function Badge({ children, tone: t = "neutral" }: { children: ReactNode; tone?: "neutral" | "pos" | "neg" | "warn" | "live" | "paper" | "accent" }) {
-  const m = { neutral: "bg-line/60 text-muted", pos: "bg-pos/15 text-pos", neg: "bg-neg/15 text-neg", warn: "bg-warn/15 text-warn", live: "bg-live text-white", paper: "bg-paper/15 text-paper", accent: "bg-accent/15 text-accent" };
-  return <span className={cx("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide", m[t])}>{children}</span>;
+/** Grouped inset list (Apple Settings / Stocks style): rows separated by hairlines inside one rounded group. */
+export function List({ title, action, children, className }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={className}>
+      {(title || action) && (
+        <header className="mb-1.5 flex items-end justify-between gap-3 px-1">
+          {title && <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>}
+          {action}
+        </header>
+      )}
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">{children}</div>
+    </section>
+  );
+}
+
+export function ListRow({ label, value, sub, action, className }: { label: ReactNode; value?: ReactNode; sub?: ReactNode; action?: ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex min-h-11 items-center gap-3 px-4 py-2.5 text-sm", className)}>
+      <div className="min-w-0 flex-1">
+        <div className="truncate">{label}</div>
+        {sub && <div className="truncate text-xs text-muted tabular">{sub}</div>}
+      </div>
+      {value !== undefined && <div className="shrink-0 text-right font-medium tabular">{value}</div>}
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+const TONES = { neutral: "bg-line/60 text-muted", pos: "bg-pos/12 text-pos", neg: "bg-neg/12 text-neg", warn: "bg-warn/15 text-warn", live: "bg-live text-white", paper: "bg-paper/12 text-paper", accent: "bg-accent/12 text-accent" } as const;
+
+/** Sentence-case pill (no tracked capitals). */
+export function Badge({ children, tone: t = "neutral" }: { children: ReactNode; tone?: keyof typeof TONES }) {
+  return <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium first-letter:uppercase", TONES[t])}>{children}</span>;
 }
 
 export const ModeBadge = ({ mode }: { mode: string }) => <Badge tone={mode === "live" ? "live" : "paper"}>{mode}</Badge>;
 
 export function StatusBadge({ s }: { s: string }) {
   const t = s === "running" || s === "opened" || s === "OK" || s === "ok" || s === "connected" ? "pos" : s === "paused" || s === "cooldown" || s === "DEGRADED" || s === "unverified" ? "warn" : s === "halted" || s === "rejected" || s === "CHALLENGE" || s === "down" || s === "error" ? "neg" : "neutral";
-  return <Badge tone={t}>{s}</Badge>;
+  return <Badge tone={t}>{s.toLowerCase()}</Badge>;
 }
 
 export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
-      className={cx("relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:opacity-40", checked ? "bg-pos" : "bg-line")}>
-      <span className={cx("absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
-    </button>
-  );
+  return <ShadSwitch checked={checked} onCheckedChange={onChange} aria-label={label} disabled={disabled} />;
 }
 
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-xl bg-line/50 p-0.5" role="tablist">
-      {options.map((o) => (
-        <button key={o.value} role="tab" aria-selected={value === o.value} onClick={() => onChange(o.value)}
-          className={cx("rounded-[10px] px-3 py-1 text-sm font-medium", value === o.value ? "bg-accent text-white shadow-sm" : "text-muted hover:text-fg")}>
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <ToggleGroup type="single" value={value} onValueChange={(v) => v && onChange(v as T)}>
+      {options.map((o) => <ToggleGroupItem key={o.value} value={o.value}>{o.label}</ToggleGroupItem>)}
+    </ToggleGroup>
   );
 }
 
+const field = "h-9 w-full rounded-lg border border-input bg-surface px-3 text-sm tabular outline-none transition-colors duration-100 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50";
+
 export function Input(p: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-9 w-full rounded-xl border border-line bg-elevated px-3 text-sm outline-none focus:border-accent tabular", p.className)} />;
+  return <input {...p} className={cn(field, p.className)} />;
+}
+
+/** Native select styled with the tokens (keeps the platform picker and keyboard behaviour). */
+export function NativeSelect({ className, ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...p} className={cn(field, "w-auto pr-8", className)} />;
 }
 
 /** Numeric field with steppers. Value stays a number in the form; config strings are built at save. */
 export function Stepper({ value, onChange, step = 1, min, max, suffix, disabled }: { value: number | null; onChange: (v: number | null) => void; step?: number; min?: number; max?: number; suffix?: string; disabled?: boolean }) {
   // Never clamp silently: the validator rejects out-of-range values with a reason.
-  const clamp = (v: number) => v;
+  const nudge = (d: number) => onChange(+(((value ?? 0) + d).toFixed(6)));
+  const btn = "h-full px-2.5 text-muted hover:text-foreground focus-visible:outline-none focus-visible:text-foreground disabled:opacity-40";
   return (
-    <div className="flex h-9 items-center rounded-xl border border-line bg-elevated">
-      <button type="button" disabled={disabled} className="h-full px-2.5 text-muted hover:text-fg" onClick={() => onChange(clamp(+(((value ?? 0) - step).toFixed(6))))} aria-label="decrease">−</button>
-      <input disabled={disabled} className="h-full w-full min-w-0 bg-transparent text-center text-sm outline-none tabular" inputMode="decimal" value={value ?? ""} min={min} max={max}
+    <div className="flex h-9 items-center rounded-lg border border-input bg-surface focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
+      <button type="button" disabled={disabled} className={btn} onClick={() => nudge(-step)} aria-label="decrease">−</button>
+      <input disabled={disabled} className="h-full w-full min-w-0 bg-transparent text-center text-sm tabular outline-none" inputMode="decimal" value={value ?? ""} min={min} max={max}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />
       {suffix && <span className="pr-1 text-xs text-muted">{suffix}</span>}
-      <button type="button" disabled={disabled} className="h-full px-2.5 text-muted hover:text-fg" onClick={() => onChange(clamp(+(((value ?? 0) + step).toFixed(6))))} aria-label="increase">+</button>
+      <button type="button" disabled={disabled} className={btn} onClick={() => nudge(step)} aria-label="increase">+</button>
     </div>
   );
 }
@@ -101,36 +127,103 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 
 export function Kpi({ label, value, sub, valueTone }: { label: string; value: ReactNode; sub?: ReactNode; valueTone?: string | number | null }) {
   return (
-    <div className="rounded-2xl bg-surface border border-line/70 shadow-soft px-4 py-3.5">
+    <div className="rounded-2xl border border-border bg-card px-4 py-3.5">
       <div className="text-xs text-muted">{label}</div>
-      <div className={cx("mt-1 text-xl font-semibold tabular tracking-tight", valueTone !== undefined && tone(valueTone))}>{value}</div>
+      <div className={cn("mt-1 text-xl font-semibold tabular tracking-tight", valueTone !== undefined && tone(valueTone))}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-muted tabular">{sub}</div>}
     </div>
   );
 }
 
 export const Loading = ({ label = "Loading" }: { label?: string }) => (
-  <div className="flex items-center gap-2 py-10 justify-center text-sm text-muted"><span className="h-3 w-3 animate-pulse rounded-full bg-accent" />{label}…</div>
+  <div role="status" className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+    <span className="h-3 w-3 animate-pulse rounded-full bg-accent motion-reduce:animate-none" />{label}…
+  </div>
 );
 export const Empty = ({ children }: { children: ReactNode }) => <div className="py-10 text-center text-sm text-muted">{children}</div>;
 export const ErrorBox = ({ error }: { error: unknown }) => (
-  <div className="rounded-xl border border-neg/40 bg-neg/10 px-4 py-3 text-sm text-neg">{String((error as Error)?.message ?? error)}</div>
+  <div role="alert" className="rounded-xl border border-neg/40 bg-neg/10 px-4 py-3 text-sm text-neg">{String((error as Error)?.message ?? error)}</div>
 );
 
+/** Inset table: sticky header, hairline rows. Numeric cells use <Td num>. */
 export function Table({ head, children }: { head: ReactNode[]; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto -mx-5 px-5">
+    <div className="-mx-5 overflow-x-auto px-5">
       <table className="w-full text-sm tabular">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-muted">{head.map((h, i) => <th key={i} className="whitespace-nowrap py-2 pr-4 font-medium">{h}</th>)}</tr>
+        <thead className="sticky top-0 z-10 bg-card">
+          <tr className="border-b border-border text-left text-xs text-muted">{head.map((h, i) => <th key={i} className="whitespace-nowrap py-2 pr-4 font-medium">{h}</th>)}</tr>
         </thead>
-        <tbody className="[&>tr]:border-b [&>tr]:border-line/50">{children}</tbody>
+        <tbody className="[&>tr:hover]:bg-line/25 [&>tr]:border-b [&>tr]:border-border/60 [&>tr:last-child]:border-0">{children}</tbody>
       </table>
     </div>
   );
 }
-export const Td = ({ children, className }: { children: ReactNode; className?: string }) => <td className={cx("whitespace-nowrap py-2 pr-4", className)}>{children}</td>;
+export const Td = ({ children, className, num }: { children: ReactNode; className?: string; num?: boolean }) => (
+  <td className={cn("whitespace-nowrap py-2 pr-4", num && "text-right", className)}>{children}</td>
+);
+
+/** Props for a table row that opens a detail: works with the mouse and with Enter / Space, focus ring visible. */
+export function rowProps(onActivate: () => void) {
+  return {
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate();
+      }
+    },
+    className: "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+  };
+}
 
 export function Signed({ v, fmt }: { v: string | number | null | undefined; fmt: (v: string | number | null | undefined) => string }) {
   return <span className={tone(v)}>{fmt(v)}</span>;
+}
+
+/**
+ * Confirmation for actions that move money. onConfirm runs only on the confirm button; the dialog stays open
+ * while it runs, closes only when it succeeds, and shows the error when it fails (a failed kill switch must not
+ * look like it worked).
+ */
+export function ConfirmDialog({ title, body, confirmLabel, tone: t = "default", onConfirm, trigger }: {
+  title: string; body: ReactNode; confirmLabel: string; tone?: "danger" | "default"; onConfirm: () => unknown | Promise<unknown>; trigger: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <AlertDialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setError(null); }}>
+      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription asChild><div>{body}</div></AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && <div role="alert" className="mt-3 rounded-lg border border-neg/40 bg-neg/10 px-3 py-2 text-sm text-neg">Not done: {error}</div>}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={busy}
+            className={t === "danger" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+            onClick={(e) => { e.preventDefault(); void run(); }}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }

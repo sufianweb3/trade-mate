@@ -5,7 +5,7 @@ import { api, ApiError } from "@/lib/agent";
 import { time, usd } from "@/lib/format";
 import type { BotResp } from "@/lib/types";
 import { BotEditor } from "./bot-editor";
-import { Button, Card, ErrorBox, Loading, ModeBadge } from "./ui";
+import { Button, Card, ErrorBox, Loading, ModeBadge, ConfirmDialog } from "./ui";
 
 const INTRO: Record<string, string> = {
   paper: "Bot 1 Sniper on the exchange simulator. Its own account, history and settings.",
@@ -30,11 +30,16 @@ export function TradeSettings({ botId }: { botId: string }) {
           <ModeBadge mode={b.config.mode} />
           <span className="flex-1" />
           {b.config.mode === "paper" && (
-            <Button variant="ghost" onClick={async () => {
-              if (!confirm("Archive this run and start fresh? History stays exportable.")) return;
-              try { await api(`/api/bots/${b.id}/reset`, { method: "POST" }); } catch (e) { setErr(e instanceof ApiError ? e.message : String(e)); }
-              void qc.invalidateQueries();
-            }}>Reset stats</Button>
+            <ConfirmDialog
+              title="Reset stats?"
+              body="This run is archived and a fresh one starts. History stays exportable."
+              confirmLabel="Archive and start fresh"
+              onConfirm={async () => {
+                try { await api(`/api/bots/${b.id}/reset`, { method: "POST" }); } catch (e) { setErr(e instanceof ApiError ? e.message : String(e)); }
+                void qc.invalidateQueries();
+              }}
+              trigger={<Button variant="ghost">Reset stats</Button>}
+            />
           )}
         </div>
         <p className="mt-1 text-sm text-muted">{INTRO[botId]}</p>
