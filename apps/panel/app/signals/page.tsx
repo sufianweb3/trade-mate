@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
-import { Card, Empty, ErrorBox, Input, Loading, Segmented, Signed, StatusBadge, Table, Td } from "@/components/ui";
+import { Card, Empty, ErrorBox, Input, Loading, rowProps, Segmented, Signed, StatusBadge, Table, Td } from "@/components/ui";
 import { api } from "@/lib/agent";
 import { ExportButton } from "@/components/export-button";
 import { useRunParam, ViewSelect } from "@/components/bot-controls";
@@ -95,20 +95,20 @@ export default function Signals() {
       <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted">
         Columns:
         {["oi_chg_5m", "oi_chg_15m", "oi_chg_1h", "oi_chg_4h", "vol_chg_1h", "price_chg_5m", "price_chg_1h", "funding_rate"].map((c) => (
-          <label key={c} className="flex items-center gap-1"><input type="checkbox" checked={cols.includes(c)} onChange={() => setCols(cols.includes(c) ? cols.filter((x) => x !== c) : [...cols, c])} />{c}</label>
+          <label key={c} className="flex items-center gap-1"><input type="checkbox" className="accent-accent" checked={cols.includes(c)} onChange={() => setCols(cols.includes(c) ? cols.filter((x) => x !== c) : [...cols, c])} />{c}</label>
         ))}
       </div>
       {q.isLoading ? <Loading /> : q.error ? <ErrorBox error={q.error} /> : !q.data?.length ? <Empty>No signals yet. Rule matches appear here, including rejected ones.</Empty> : (
         <Table head={["Time", "Bot", "Symbol", "Status", "Venue", ...cols, "Reasons", "Opened", "Rematch"]}>
           {q.data.map((s) => (
             <Fragment key={s.signal_id}>
-              <tr className="cursor-pointer hover:bg-elevated" onClick={() => setOpen(open === s.signal_id ? null : s.signal_id)}>
+              <tr {...rowProps(() => setOpen(open === s.signal_id ? null : s.signal_id))} aria-expanded={open === s.signal_id}>
                 <Td>{time(s.ts)}</Td><Td>{s.bot_id}</Td><Td className="font-medium">{s.symbol}</Td><Td><StatusBadge s={s.status} /></Td><Td>{s.exchange ?? "—"}</Td>
-                {cols.map((c) => <Td key={c}><Signed v={s.metrics[c]} fmt={(v) => pct(v)} /></Td>)}
-                <Td className="max-w-[280px] truncate text-xs">{s.reject_reasons.join(", ") || "—"}{s.cooldown && <span className="text-muted"> · {s.cooldown.cause.replace("_", " ")}{s.cooldown.until ? ` until ${time(s.cooldown.until)}` : ""}</span>}</Td><Td>{s.opened_trades}</Td><Td>{s.rematch_count}</Td>
+                {cols.map((c) => <Td key={c} num><Signed v={s.metrics[c]} fmt={(v) => pct(v)} /></Td>)}
+                <Td className="max-w-[280px] truncate text-xs">{s.reject_reasons.join(", ") || "—"}{s.cooldown && <span className="text-muted"> · {s.cooldown.cause.replace("_", " ")}{s.cooldown.until ? ` until ${time(s.cooldown.until)}` : ""}</span>}</Td><Td num>{s.opened_trades}</Td><Td num>{s.rematch_count}</Td>
               </tr>
               {open === s.signal_id && (
-                <tr><td colSpan={9 + cols.length} className="bg-elevated p-4 text-xs"><SignalDetail id={s.signal_id} /></td></tr>
+                <tr><td colSpan={9 + cols.length} className="bg-secondary/60 p-4 text-xs"><SignalDetail id={s.signal_id} /></td></tr>
               )}
             </Fragment>
           ))}

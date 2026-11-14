@@ -157,6 +157,21 @@ export const Td = ({ children, className, num }: { children: ReactNode; classNam
   <td className={cn("whitespace-nowrap py-2 pr-4", num && "text-right", className)}>{children}</td>
 );
 
+/** Props for a table row that opens a detail: works with the mouse and with Enter / Space, focus ring visible. */
+export function rowProps(onActivate: () => void) {
+  return {
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate();
+      }
+    },
+    className: "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+  };
+}
+
 export function Signed({ v, fmt }: { v: string | number | null | undefined; fmt: (v: string | number | null | undefined) => string }) {
   return <span className={tone(v)}>{fmt(v)}</span>;
 }
