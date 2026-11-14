@@ -79,8 +79,19 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       w.src.quiet("BTC", px);
     };
 
+    /** Test hygiene on the TEST account only: flatten the BTC test position and cancel leftover BTC stop orders,
+     *  so every run starts and ends clean (the crash test's first instance is still alive and may re-place a stop). */
+    const flattenTestAccount = async () => {
+      const c = client();
+      if (!c) return;
+      for (const o of await openStops()) await call(c, "cancelOrder", o.id, SYM, { stop: true, trigger: true }).catch(() => undefined);
+      const p = await position().catch(() => undefined);
+      if (p) await call(c, "createOrder", SYM, "market", "sell", p.contracts, undefined, { reduceOnly: true }).catch(() => undefined);
+    };
+
     afterAll(async () => {
       await w?.app.bots.killAll().catch(() => undefined);
+      await flattenTestAccount().catch(() => undefined);
       await w?.app.stop().catch(() => undefined);
     });
 
@@ -93,6 +104,8 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
         w.app.store.records.upsertKey({ exchange: ex, enc: w.app.vault.encrypt(keys!), masked: st.masked, permissions: st.permissions, status: st.status, testnet: true, created_at: Date.now() });
       w.app.syncLimitLoaders();
       expect(st.status === "connected" || st.status === "unverified").toBe(true);
+      await flattenTestAccount();
+      expect(await openStops()).toEqual([]);
       expect(st.tradeEnabled).toBe(true);
       expect(st.permissions?.withdraw).not.toBe(true);
       checks.push("key");
@@ -110,11 +123,17 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       expect(t, "no live entry").toBeTruthy();
       expect(Number(t!.execution.filled_qty)).toBeGreaterThan(0);
       checks.push("entry");
-      expect(t!.timing.sl_placed_ts! - t!.timing.entry_fill_time).toBeLessThan(3000);
-      const stops = await openStops();
+      // Read the stored trade again once the stop's placement time is written (it lands a moment after the fill).
+      const ts = await until(() => { const x = w.app.store.records.getTrade(t!.trade_id)?.timing; return x?.sl_placed_ts != null ? x : null; }, 5000);
+      const slMs = ts?.sl_placed_ts != null ? ts.sl_placed_ts - ts.entry_fill_time : null;
+      expect(slMs, "stop placement time not recorded").not.toBeNull();
+      expect(slMs!).toBeGreaterThanOrEqual(0);
+      expect(slMs!).toBeLessThan(3000);
+      // Placed within 3s (checked above); the exchange's open-order list can lag a moment behind the placement.
+      const stops = (await until(async () => { const s = await openStops(); return s.length ? s : null; }, 5000)) ?? [];
       expect(stops.length).toBeGreaterThan(0);
       expect(D(stops[0]!.triggerPrice!).sub(t!.state.sl_price).abs().div(t!.state.sl_price).lt("0.001")).toBe(true);
-      checks.push(`sl_within_3s:${t!.timing.sl_placed_ts! - t!.timing.entry_fill_time}ms`);
+      checks.push(`sl_within_3s:${slMs}ms`);
     }, 150_000);
 
     it("trailing amend moves the exchange stop (new first, old cancelled)", async () => {
@@ -133,15 +152,15 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
     it("TP1 partial close fills on the exchange", async () => {
       const real = w.app.bots.get("real");
       const id = real.pm.openTrades()[0]!.trade_id;
-      const done = await until(() => w.app.store.records.getTrade(id)?.path.tp1_hit, 180_000, 2000);
-      if (!done) console.warn(`${ex}: TP1 (+0.12% price) not reached within 3 min on testnet; order placement verified only`);
+      const done = await until(() => w.app.store.records.getTrade(id)?.path.tp1_hit, 600_000, 2000);
+      if (!done) console.warn(`${ex}: TP1 (+0.12% price) not reached within 10 min on testnet; order placement verified only`);
       const ev = w.app.store.records.events(id).map((e) => e.type);
       expect(ev).toContain("TP1_PLACED");
       if (done) {
         expect(ev).toContain("TP1_FILL");
         checks.push("tp1_partial");
       }
-    }, 200_000);
+    }, 620_000);
 
     it("stopping the bot blocks new entries", async () => {
       const real = w.app.bots.get("real");
