@@ -1,0 +1,102 @@
+/* Trade Mate design tokens: mint white (light) and charcoal (dark).
+   The only place colours are defined. Values are "r g b" triples so Tailwind can add alpha:
+   rgb(var(--accent) / 0.12). The shadcn/ui names alias the semantic tokens. */
+
+:root {
+  --bg: 243 250 246;
+  --surface: 255 255 255;
+  --elevated: 236 245 241;
+  --line: 214 228 221;
+  --fg: 23 32 28;
+  --muted: 82 96 90;
+  --accent: 24 140 103;
+  --pos: 21 128 91;
+  --neg: 200 50 44;
+  --warn: 166 98 0;
+  --live: 205 66 26;
+  --paper: 24 140 103;
+
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg);
+  --primary: var(--fg);
+  --primary-foreground: var(--surface);
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--fg);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --destructive: var(--neg);
+  --destructive-foreground: 255 255 255;
+  --radius: 12px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 20 22 23;
+    --surface: 28 31 33;
+    --elevated: 36 40 42;
+    --line: 52 57 60;
+    --fg: 238 243 240;
+    --muted: 150 161 156;
+    --accent: 95 211 166;
+    --pos: 95 211 166;
+    --neg: 255 107 99;
+    --warn: 245 180 70;
+    --live: 255 128 82;
+    --paper: 95 211 166;
+
+    --background: var(--bg);
+    --foreground: var(--fg);
+    --card: var(--surface);
+    --card-foreground: var(--fg);
+    --popover: var(--elevated);
+    --popover-foreground: var(--fg);
+    --primary: var(--fg);
+    --primary-foreground: var(--bg);
+    --secondary: var(--elevated);
+    --secondary-foreground: var(--fg);
+    --border: var(--line);
+    --input: var(--line);
+    --ring: var(--accent);
+    --destructive: var(--neg);
+    --destructive-foreground: 20 22 23;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: 20 22 23;
+  --surface: 28 31 33;
+  --elevated: 36 40 42;
+  --line: 52 57 60;
+  --fg: 238 243 240;
+  --muted: 150 161 156;
+  --accent: 95 211 166;
+  --pos: 95 211 166;
+  --neg: 255 107 99;
+  --warn: 245 180 70;
+  --live: 255 128 82;
+  --paper: 95 211 166;
+
+  --background: var(--bg);
+  --foreground: var(--fg);
+  --card: var(--surface);
+  --card-foreground: var(--fg);
+  --popover: var(--elevated);
+  --popover-foreground: var(--fg);
+  --primary: var(--fg);
+  --primary-foreground: var(--bg);
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--fg);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+  --destructive: var(--neg);
+  --destructive-foreground: 20 22 23;
+  color-scheme: dark;
+}
