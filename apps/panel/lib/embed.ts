@@ -17,13 +17,20 @@ function readStored(): string | null {
   }
 }
 
-/**
- * True inside the desktop app. There the desktop's sidebar replaces the panel's navigation bar and drives routes
- * through window.__tradeMateNavigate (only the panel's own pages are accepted).
- */
-export function useEmbedded(routes: readonly string[]): boolean {
-  const router = useRouter();
+/** True inside the desktop app: the desktop's sidebar replaces the panel's navigation bar. Read-only. */
+export function useEmbedded(): boolean {
   const [embedded] = useState(() => typeof window !== "undefined" && isEmbedded(window.location.search, readStored()));
+  return embedded;
+}
+
+/**
+ * Desktop bridge, registered as soon as the panel starts (before the agent connects, so a sidebar click during
+ * startup never falls back to a reload): remembers desktop mode for the session and exposes
+ * window.__tradeMateNavigate, which accepts only the panel's own pages.
+ */
+export function useDesktopBridge(routes: readonly string[]): void {
+  const router = useRouter();
+  const embedded = useEmbedded();
   useEffect(() => {
     if (!embedded) return;
     try {
@@ -39,5 +46,4 @@ export function useEmbedded(routes: readonly string[]): boolean {
       delete w.__tradeMateNavigate;
     };
   }, [embedded, router, routes]);
-  return embedded;
 }

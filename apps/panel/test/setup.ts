@@ -1,4 +1,4 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 /** Node 26's own (file-backed) localStorage global shadows jsdom's and is undefined without a file: use memory. */
@@ -18,5 +18,8 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
   try { ok = typeof globalThis[name]?.getItem === "function"; } catch { ok = false; }
   if (!ok) Object.defineProperty(globalThis, name, { value: memoryStorage(), configurable: true });
 }
+
+// findBy* waits up to 5s: in the full suite the agent tests load the machine and renders can take seconds.
+configure({ asyncUtilTimeout: 5_000 });
 
 afterEach(() => cleanup());

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, connect, useAgent } from "@/lib/agent";
-import { useEmbedded } from "@/lib/embed";
+import { useDesktopBridge, useEmbedded } from "@/lib/embed";
 import type { StateResp } from "@/lib/types";
 import { useView } from "@/lib/view";
 import { PageHeader } from "./page-header";
@@ -63,6 +63,7 @@ function Gate({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const state = useAgent((s) => s.state);
   const hydrate = useView((s) => s.hydrate);
+  useDesktopBridge(ROUTES);
   useEffect(() => {
     hydrate();
     const theme = (() => { try { return localStorage.getItem("oisniper.theme"); } catch { return null; } })();
@@ -128,7 +129,7 @@ function Onboarding() {
 /** Desktop (embedded): page header only, the Trade Mate sidebar navigates. Browser: a links-only bar on top. */
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const embedded = useEmbedded(ROUTES);
+  const embedded = useEmbedded();
   const st = useQuery({ queryKey: ["state"], queryFn: () => api<StateResp>("/api/state") });
   const s = st.data;
   const active = (href: string) => (href === "/" ? path === "/" : path?.startsWith(href.slice(0, -1)));

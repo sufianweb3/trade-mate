@@ -16,7 +16,7 @@ vi.mock("@/lib/agent", () => ({
 }));
 
 import { isEmbedded } from "@/lib/embed";
-import { Shell } from "@/components/shell";
+import { Providers, Shell } from "@/components/shell";
 
 function mount(search: string) {
   window.history.replaceState(null, "", `/${search}`);
@@ -67,7 +67,9 @@ describe("Shell", () => {
   });
 
   it("navigate hook goes to panel pages and ignores unknown routes", async () => {
-    mount("?embed=desktop");
+    window.history.replaceState(null, "", "/?embed=desktop");
+    sessionStorage.clear();
+    render(<Providers><p>page</p></Providers>);
     await waitFor(() => expect(typeof (window as unknown as { __tradeMateNavigate?: unknown }).__tradeMateNavigate).toBe("function"));
     const nav = (window as unknown as { __tradeMateNavigate: (r: string) => void }).__tradeMateNavigate;
     nav("/evil");

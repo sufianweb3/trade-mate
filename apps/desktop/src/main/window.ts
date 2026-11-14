@@ -2,7 +2,7 @@ import { BaseWindow, WebContentsView, nativeTheme, session, shell } from "electr
 import { join } from "node:path";
 import { isPanelView, type PanelView, type Rect, type ViewName } from "../shared/types";
 import { assetPath } from "./paths";
-import { nextRoute, routeFor, viewForUrl } from "./pure/panelRoutes";
+import { navigateScript, nextRoute, viewForUrl } from "./pure/panelRoutes";
 import { isAgentUrl, isSafeExternalUrl } from "./pure/urlGuard";
 import { log } from "./logger";
 
@@ -102,8 +102,7 @@ export class ShellWindow {
   }
 
   private navigatePanel(v: PanelView): void {
-    const route = JSON.stringify(routeFor(v));
-    void this.panelView.webContents.executeJavaScript(`window.__tradeMateNavigate ? window.__tradeMateNavigate(${route}) : location.assign(${route})`).catch((e) => log.warn("panel navigate failed", (e as Error).message));
+    void this.panelView.webContents.executeJavaScript(navigateScript(v)).catch((e) => log.warn("panel navigate failed", (e as Error).message));
   }
 
   get isPanelLoaded(): boolean {

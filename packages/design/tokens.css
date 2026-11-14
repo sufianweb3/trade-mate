@@ -9,12 +9,12 @@
   --line: 214 228 221;
   --fg: 23 32 28;
   --muted: 82 96 90;
-  --accent: 24 140 103;
+  --accent: 18 112 82;
   --pos: 21 128 91;
   --neg: 200 50 44;
   --warn: 166 98 0;
   --live: 205 66 26;
-  --paper: 24 140 103;
+  --paper: 18 112 82;
 
   --background: var(--bg);
   --foreground: var(--fg);
@@ -47,7 +47,7 @@
     --pos: 95 211 166;
     --neg: 255 107 99;
     --warn: 245 180 70;
-    --live: 255 128 82;
+    --live: 205 66 26;
     --paper: 95 211 166;
 
     --background: var(--bg);
@@ -80,7 +80,7 @@
   --pos: 95 211 166;
   --neg: 255 107 99;
   --warn: 245 180 70;
-  --live: 255 128 82;
+  --live: 205 66 26;
   --paper: 95 211 166;
 
   --background: var(--bg);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextRoute, routeFor, viewForUrl } from "../src/main/pure/panelRoutes";
+import { navigateScript, nextRoute, routeFor, viewForUrl } from "../src/main/pure/panelRoutes";
 import { parseSettings } from "../src/main/pure/settingsSchema";
 
 describe("panel routes", () => {
@@ -17,6 +17,12 @@ describe("panel routes", () => {
   it("gives each sidebar item its route", () => {
     expect(routeFor("overview")).toBe("/");
     expect(routeFor("health")).toBe("/health/");
+  });
+
+  it("the navigate script keeps desktop mode when it has to fall back to a full load", () => {
+    const js = navigateScript("signals");
+    expect(js).toContain('window.__tradeMateNavigate("/signals/")');
+    expect(js).toContain('location.assign("/signals/?embed=desktop")');
   });
 
   it("pending route is applied on ready", () => {

@@ -1,5 +1,5 @@
 "use client";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { tone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -181,21 +181,47 @@ export function Signed({ v, fmt }: { v: string | number | null | undefined; fmt:
   return <span className={tone(v)}>{fmt(v)}</span>;
 }
 
-/** Confirmation for actions that move money. onConfirm runs only on the confirm button. */
+/**
+ * Confirmation for actions that move money. onConfirm runs only on the confirm button; the dialog stays open
+ * while it runs, closes only when it succeeds, and shows the error when it fails (a failed kill switch must not
+ * look like it worked).
+ */
 export function ConfirmDialog({ title, body, confirmLabel, tone: t = "default", onConfirm, trigger }: {
-  title: string; body: ReactNode; confirmLabel: string; tone?: "danger" | "default"; onConfirm: () => void | Promise<void>; trigger: ReactNode;
+  title: string; body: ReactNode; confirmLabel: string; tone?: "danger" | "default"; onConfirm: () => unknown | Promise<unknown>; trigger: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setError(null); }}>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild><div>{body}</div></AlertDialogDescription>
         </AlertDialogHeader>
+        {error && <div role="alert" className="mt-3 rounded-lg border border-neg/40 bg-neg/10 px-3 py-2 text-sm text-neg">Not done: {error}</div>}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction className={t === "danger" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined} onClick={() => void onConfirm()}>{confirmLabel}</AlertDialogAction>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={busy}
+            className={t === "danger" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+            onClick={(e) => { e.preventDefault(); void run(); }}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

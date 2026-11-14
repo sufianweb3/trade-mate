@@ -27,6 +27,15 @@ export function viewForUrl(url: string, port: number): PanelView | null {
   return PANEL_VIEWS.find((v) => v !== "overview" && path.startsWith(PANEL_ROUTES[v])) ?? null;
 }
 
+/**
+ * Script run in the panel to open a page: client-side through the panel's bridge, or (bridge not there yet) a full
+ * load that keeps desktop mode.
+ */
+export function navigateScript(view: PanelView): string {
+  const route = routeFor(view);
+  return `window.__tradeMateNavigate ? window.__tradeMateNavigate(${JSON.stringify(route)}) : location.assign(${JSON.stringify(`${route}?embed=desktop`)})`;
+}
+
 /** After the panel (re)loads: the item clicked while it was not ready wins, else where it is, else Overview. */
 export function nextRoute(pending: PanelView | null, loaded: PanelView | null): PanelView {
   return pending ?? loaded ?? "overview";

@@ -57,4 +57,21 @@ describe("design tokens", () => {
       expect(contrast(t.accent!, t.bg!), `${name} accent/bg`).toBeGreaterThanOrEqual(3);
     }
   });
+
+  /** A colour mixed over the background at `alpha` (how bg-accent/12 tints render). */
+  const tint = (c: string, bg: string, alpha: number) =>
+    rgb(c).map((x, i) => Math.round(x * alpha + rgb(bg)[i]! * (1 - alpha))).join(" ");
+
+  it("accent is readable as text, also on its own 12% tint (active nav item)", () => {
+    for (const [name, t] of Object.entries({ light: blocks().light, dark: blocks().darkForced })) {
+      expect(contrast(t.accent!, t.bg!), `${name} accent text/bg`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t.accent!, tint(t.accent!, t.bg!, 0.12)), `${name} accent on accent/12`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("white text on the live colour (live banner, live badge) is readable in both themes", () => {
+    for (const [name, t] of Object.entries({ light: blocks().light, dark: blocks().darkForced })) {
+      expect(contrast("255 255 255", t.live!), `${name} white/live`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
