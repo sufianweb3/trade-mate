@@ -88,6 +88,7 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       w = await boot(ex, dir);
       await w.app.start({ scraper: true });
       const st = await w.app.accounts.connect(ex, keys!, true, true);
+      w.app.syncLimitLoaders(); // as POST /api/exchanges/:ex/keys does: Binance leverage brackets need the key
       expect(st.status === "connected" || st.status === "unverified").toBe(true);
       expect(st.tradeEnabled).toBe(true);
       expect(st.permissions?.withdraw).not.toBe(true);
@@ -171,6 +172,7 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       const w2 = await boot(ex, dir);
       await w2.app.start({ scraper: false });
       await w2.app.accounts.connect(ex, keys!, true, true);
+      w2.app.syncLimitLoaders();
       const ev = w2.app.store.records.events(t!.trade_id).map((e) => e.type);
       expect(ev).toContain("RECONCILE");
       expect(w2.app.bots.get("real").row().status).toBe("stopped"); // never auto-start

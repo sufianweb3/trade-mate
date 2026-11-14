@@ -38,7 +38,12 @@ export function mapExchangeError(e: unknown): ErrorCode {
 
 interface Tracked { ctx: PositionCtx; stopId: string | null; tpId: string | null; stopTrigger: Decimal | null; tpPrice: Decimal | null; capitalUsed: Decimal }
 
-export interface LiveOptions { botId: string; hub: MarketHub; clock: Clock; accounts: LiveAccounts; maxCapital: Decimal; takerOverridePct: Record<string, number> }
+export interface LiveOptions {
+  botId: string; hub: MarketHub; clock: Clock; accounts: LiveAccounts;
+  /** Read on every use: a saved settings change (raise or lower) applies at once, without a restart. */
+  maxCapital: () => Decimal;
+  takerOverridePct: Record<string, number>;
+}
 
 /** Real orders through ccxt. Every entry also gets a shadow SimAdapter fill for calibration. */
 export class LiveAdapter implements ExecutionAdapter {
@@ -129,10 +134,10 @@ export class LiveAdapter implements ExecutionAdapter {
     return u;
   }
   async available(): Promise<Decimal | null> {
-    return Decimal.max(this.o.maxCapital.sub(this.used()), 0);
+    return Decimal.max(this.o.maxCapital().sub(this.used()), 0);
   }
   async walletBalance(): Promise<Decimal | null> {
-    return this.o.maxCapital;
+    return this.o.maxCapital();
   }
 
   async placeIoc(req: IocRequest): Promise<FillResult> {
