@@ -88,7 +88,10 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       w = await boot(ex, dir);
       await w.app.start({ scraper: true });
       const st = await w.app.accounts.connect(ex, keys!, true, true);
-      w.app.syncLimitLoaders(); // as POST /api/exchanges/:ex/keys does: Binance leverage brackets need the key
+      // As POST /api/exchanges/:ex/keys does: store the key (a restart reconnects from it) and load leverage brackets.
+      if (st.status === "connected" || st.status === "unverified")
+        w.app.store.records.upsertKey({ exchange: ex, enc: w.app.vault.encrypt(keys!), masked: st.masked, permissions: st.permissions, status: st.status, testnet: true, created_at: Date.now() });
+      w.app.syncLimitLoaders();
       expect(st.status === "connected" || st.status === "unverified").toBe(true);
       expect(st.tradeEnabled).toBe(true);
       expect(st.permissions?.withdraw).not.toBe(true);
@@ -99,6 +102,9 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       const real = w.app.bots.get("real");
       real.saveConfig(testConfig(ex));
       await real.start();
+      // A running bot already has a minute of BTC data; the volatility gate refuses to trade without it (fail closed).
+      await w.hub.subscribe(ex, SYM, "testnet-warmup");
+      expect(await until(() => w.hub.range1mPct(ex, SYM) != null, 90_000, 1000), "no 1m price data for BTC").toBe(true);
       await signal();
       const t = await until(() => w.app.store.records.listTrades({ botId: "real", status: "open" })[0], 15_000);
       expect(t, "no live entry").toBeTruthy();
@@ -109,7 +115,7 @@ for (const ex of ["binance", "bybit", "okx"] as const) {
       expect(stops.length).toBeGreaterThan(0);
       expect(D(stops[0]!.triggerPrice!).sub(t!.state.sl_price).abs().div(t!.state.sl_price).lt("0.001")).toBe(true);
       checks.push(`sl_within_3s:${t!.timing.sl_placed_ts! - t!.timing.entry_fill_time}ms`);
-    }, 60_000);
+    }, 150_000);
 
     it("trailing amend moves the exchange stop (new first, old cancelled)", async () => {
       const real = w.app.bots.get("real");
