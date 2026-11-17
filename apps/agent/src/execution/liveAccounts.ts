@@ -58,6 +58,23 @@ export class LiveAccounts {
   list(): AccountStatus[] {
     return [...this.status.values()];
   }
+  private lastTimeSync = new Map<ExchangeId, number>();
+
+  /**
+   * True when ccxt stamps this account's signed requests with exchange time (adjustForTimeDifference + a measured
+   * difference), so the PC clock does not affect orders. A difference older than 10 minutes is refreshed in the
+   * background (PRD: sync every 10 min), never in the order's hot path.
+   */
+  timeCorrected(ex: ExchangeId, now = Date.now()): boolean {
+    const c = this.clients.get(ex);
+    if (!c || c.options.adjustForTimeDifference !== true) return false;
+    if (now - (this.lastTimeSync.get(ex) ?? 0) > 10 * 60_000) {
+      this.lastTimeSync.set(ex, now);
+      void call(c, "loadTimeDifference").catch((e) => log.warn({ ex, err: mapMsg(e) }, "time difference refresh failed"));
+    }
+    return typeof c.options.timeDifference === "number";
+  }
+
   canTrade(ex: ExchangeId): boolean {
     const s = this.status.get(ex);
     return !!s && s.tradeEnabled && (s.status === "connected" || s.status === "unverified");
@@ -110,6 +127,8 @@ export class LiveAccounts {
       const b = Balance.parse(await call(c, "fetchBalance", { type: "swap" }));
       st.freeUsdt = b.USDT?.free != null ? D(String(b.USDT.free)).toString() : null;
       st.authOk = true;
+      // Exchange time for signing, measured now so the first order never waits for it.
+      if (c.options.adjustForTimeDifference === true) await call(c, "loadTimeDifference").catch(() => undefined);
     } catch (e) {
       return no({ ...st, status: "error", reason: `Auth failed: ${mapMsg(e)}` });
     }
@@ -152,6 +171,7 @@ export class LiveAccounts {
 
   private save(ex: ExchangeId, st: AccountStatus, c: CcxtLike | null): AccountStatus {
     this.status.set(ex, st);
+    if (c) this.lastTimeSync.set(ex, Date.now());
     if (c) this.clients.set(ex, c);
     else this.clients.delete(ex);
     return st;

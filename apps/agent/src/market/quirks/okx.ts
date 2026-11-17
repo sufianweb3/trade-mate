@@ -5,7 +5,7 @@ const Cfg = z.object({ data: z.array(z.object({ perm: z.string().optional(), ip:
 
 export const okx: ExchangeQuirks = {
   ccxtId: "okx",
-  options: { defaultType: "swap" },
+  options: { defaultType: "swap", adjustForTimeDifference: true },
   testnet: "demo",
   needsPassphrase: true,
   stopParams: (t) => ({ reduceOnly: true, slTriggerPxType: t === "mark" ? "mark" : "last", tdMode: "isolated" }),

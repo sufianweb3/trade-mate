@@ -17,6 +17,12 @@ export interface ReadyItem {
 
 const PassFile = z.record(z.string(), z.object({ passedAt: z.number(), checks: z.array(z.string()) }));
 
+/** Orders are stamped with exchange time when ccxt corrects it, so PC clock drift is shown, not blocking. */
+export function clockDetail(off: number | null, corrected: boolean): string {
+  const pc = off == null ? "PC clock offset unknown" : `PC clock off by ${Math.round(off)} ms`;
+  return corrected ? `${pc}; orders use exchange time, so this does not matter` : `${pc}; orders are blocked above 1000 ms. Sync it in Windows Settings > Time > Sync now`;
+}
+
 /** Written by `pnpm test:testnet` when an exchange passes the full live-order suite. */
 export function testnetPasses(dataDir = process.env.OISNIPER_DATA_DIR ?? defaultDataDir()): z.infer<typeof PassFile> {
   const f = join(dataDir, "testnet-pass.json");
@@ -44,7 +50,7 @@ export function realReadiness(app: App) {
       { id: "isolated", required: true, label: "Isolated margin", ok: !!probe?.isolated, detail: probe ? `${probe.symbol} ${new Date(probe.ts).toISOString().slice(0, 16)}` : "Test the key again" },
       { id: "one_way", required: true, label: "One-way position mode", ok: !!probe?.oneWay, detail: probe ? probe.details.join("; ") || "ok" : "Test the key again" },
       { id: "leverage", required: true, label: `Leverage ${cfg.leverages[0]}x settable`, ok: !!probe?.leverageSet && probe.leverage >= (cfg.liveSelection?.leverage ?? cfg.leverages[0] ?? 1), detail: probe ? `${probe.leverage}x on ${probe.symbol}` : "Test the key again" },
-      { id: "clock", required: true, label: "Clock synced (< 500 ms)", ok: off != null && Math.abs(off) < 500, detail: off == null ? "unknown" : `${Math.round(off)} ms` },
+      { id: "clock", required: false, label: "Clock synced (recommended)", ok: (off != null && Math.abs(off) < 500) || app.accounts.timeCorrected(ex), detail: clockDetail(off ?? null, app.accounts.timeCorrected(ex)) },
       { id: "testnet", required: false, label: "Testnet pass recorded (recommended)", ok: !!passes[ex], detail: passes[ex] ? `${new Date(passes[ex]!.passedAt).toISOString().slice(0, 16)} (${passes[ex]!.checks.length} checks)` : "not recorded: optional, needs pnpm test:testnet from the source code" },
     ];
     return { exchange: ex, ready: items.every((i) => i.ok || !i.required), items };

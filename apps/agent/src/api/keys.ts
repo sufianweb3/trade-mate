@@ -18,7 +18,7 @@ export function currentKeyReport(app: App, ex: ExchangeId): KeyReport | null {
   if (!st) return null;
   const probe = app.store.getSetting<SetupProbe | null>(`readiness:${ex}`, null);
   const off = app.o.hub.health().find((h) => h.exchange === ex)?.clockOffsetMs ?? null;
-  return buildKeyReport(st, probe, off, realLeverage(app));
+  return buildKeyReport(st, probe, off, realLeverage(app), app.accounts.timeCorrected(ex));
 }
 
 /**
@@ -45,7 +45,7 @@ export async function testAndConnectKey(app: App, ex: ExchangeId, s: KeySecret, 
       log.warn({ ex, err: String((e as Error).message).slice(0, 160) }, "account setup probe failed");
     }
   }
-  return buildKeyReport(st, probe, off, realLeverage(app));
+  return buildKeyReport(st, probe, off, realLeverage(app), app.accounts.timeCorrected(ex));
 }
 
 /** Re-test the stored key (Test again button). */
