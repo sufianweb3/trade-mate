@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/agent";
 import type { BotResp, StateResp } from "@/lib/types";
+import { CoinGlassConnect } from "./coinglass-connect";
 import { Button, Card } from "./ui";
 
 /**
@@ -19,18 +20,6 @@ export function GetStarted() {
   const cgBots = bots.data.filter((b) => b.config.mode !== "live" && (b.config.dataSource?.kind ?? "coinglass") === "coinglass");
   if (!cgBots.length || st.data.scraper.status === "OK") return null;
 
-  const login = async () => {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await api("/api/scraper/show-browser", { method: "POST", json: { show: true } });
-      setMsg("A browser window opened on CoinGlass. Log in, then click Customize and turn on OI Change 5m/15m/30m/1h/4h, Volume (1h%)/(4h%)/(24h%) and Price Change 5m/1h/4h, then Save. This card disappears once CoinGlass is OK.");
-    } catch (e) {
-      setMsg((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   const useExchange = async () => {
     setBusy(true);
     setMsg(null);
@@ -49,8 +38,8 @@ export function GetStarted() {
       <p className="text-sm text-muted">
         {cgBots.map((b) => b.name).join(" and ")} {cgBots.length > 1 ? "use" : "uses"} CoinGlass, which is not connected yet. Choose one:
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="primary" disabled={busy} onClick={() => void login()}>Log in to CoinGlass</Button>
+      <div className="mt-3 flex flex-wrap items-start gap-4">
+        <CoinGlassConnect />
         <Button disabled={busy} onClick={() => void useExchange()} title="Free public data from Binance, Bybit, OKX, Gate and KuCoin. Needs about 5 minutes to warm up.">Use exchange data instead (no account)</Button>
       </div>
       <p className="mt-2 text-xs text-muted">You can change this later in Settings → Signal Data Source. Each bot then needs Start on this page.</p>

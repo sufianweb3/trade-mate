@@ -4,10 +4,10 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/agent";
 import { Badge, Button, Card, ConfirmDialog, cx, Empty, ErrorBox, Loading } from "./ui";
 
-interface Item { id: string; label: string; ok: boolean; detail: string }
+interface Item { id: string; label: string; ok: boolean; detail: string; required?: boolean }
 interface Readiness { ready: boolean; exchanges: { exchange: string; ready: boolean; items: Item[] }[] }
 
-/** Real can't start until every item is green for every exchange the Real bot may trade on. */
+/** Real can't start until every required item is green for every exchange the Real bot may trade on. Optional items show as Recommended. */
 export function RealReadiness() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["readiness"], queryFn: () => api<Readiness>("/api/real/readiness"), refetchInterval: 10_000 });
@@ -49,23 +49,23 @@ export function RealReadiness() {
                 />
               </div>
               <ul className="divide-y divide-border text-sm">
-                {e.items.map((i) => (
+                {e.items.map((i) => { const st = i.ok ? "ok" : i.required === false ? "rec" : "miss"; const color = st === "ok" ? "text-pos" : st === "rec" ? "text-warn" : "text-neg"; return (
                   <li key={i.id} className="flex items-center gap-2 py-1.5">
-                    <span aria-hidden className={cx("w-4 shrink-0 font-bold", i.ok ? "text-pos" : "text-neg")}>{i.ok ? "✓" : "✕"}</span>
+                    <span aria-hidden className={cx("w-4 shrink-0 font-bold", color)}>{st === "ok" ? "✓" : st === "rec" ? "!" : "✕"}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block">{i.label}</span>
                       <span className="block truncate text-xs text-muted" title={i.detail}>{i.detail}</span>
                     </span>
-                    <span className={cx("shrink-0 text-xs font-medium", i.ok ? "text-pos" : "text-neg")}>{i.ok ? "OK" : "Missing"}</span>
+                    <span className={cx("shrink-0 text-xs font-medium", color)}>{st === "ok" ? "OK" : st === "rec" ? "Recommended" : "Missing"}</span>
                   </li>
-                ))}
+                ); })}
               </ul>
             </div>
           ))}
         </div>
       )}
       {msg && <div className="mt-3"><ErrorBox error={msg} /></div>}
-      <p className="mt-3 text-xs text-muted">Testnet pass comes from <code>pnpm test:testnet</code> (Binance futures testnet, Bybit testnet, OKX demo). Exchanges without a testnet cannot pass this item, so Real will not trade on them.</p>
+      <p className="mt-3 text-xs text-muted">Isolated margin, one-way mode and leverage are set when you test the key (Check &amp; prepare repeats it). The testnet pass is optional: it comes from <code>pnpm test:testnet</code> in the source code and does not block Real.</p>
     </Card>
   );
 }

@@ -37,7 +37,6 @@ export class ExchangeDataSource implements SnapshotSource {
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
-  async setVisible(): Promise<void> {}
 
   private tradeBases(): Set<string> {
     const s = new Set<string>();

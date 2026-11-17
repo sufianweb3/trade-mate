@@ -1,11 +1,12 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { z } from "zod";
 import { log } from "../log";
 import {
   CHANGE_STATE_SCRIPT, ensureColumnsScript, EXTRACT_SCRIPT, gotoPageScript, LOGIN_STATE_SCRIPT, OBSERVE_SCRIPT, SORT_OI5M_SCRIPT, WANTED_COLUMNS,
 } from "./coinglassScripts";
+import { ConnectFlow, type ConnectStatus } from "./coinglassConnect";
 import { classifyHeader, RawTableSchema, type RawTable } from "./parser";
+import { killProfileBrowsers, launchFreeingProfile } from "./profileLock";
+import { browserLaunch } from "./browserLaunch";
 import type { SnapshotSource, SourceResult } from "./source";
 
 interface PwPage {
@@ -13,43 +14,15 @@ interface PwPage {
   evaluate<T>(expr: string): Promise<T>;
   title(): Promise<string>;
   close(): Promise<void>;
+  on?(event: "close", cb: () => void): void;
 }
 interface PwContext {
   pages(): PwPage[];
   newPage(): Promise<PwPage>;
   close(): Promise<void>;
+  on?(event: "close", cb: () => void): void;
 }
 type LaunchOpts = { headless: boolean; viewport: { width: number; height: number }; channel?: string; executablePath?: string };
-
-const BRAVE: Record<string, string[]> = {
-  win32: ["BraveSoftware\\Brave-Browser\\Application\\brave.exe"],
-  darwin: ["/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"],
-  linux: ["/usr/bin/brave-browser", "/usr/bin/brave"],
-};
-
-/**
- * Browser for the CoinGlass profile: Brave, else Google Chrome, else Microsoft Edge, else Playwright's bundled Chromium.
- * A system browser avoids broken bundled builds and passes site checks like a normal visitor.
- * Override with OISNIPER_BROWSER=brave | chrome | msedge | bundled.
- */
-export function browserLaunch(): { channel?: string; executablePath?: string } {
-  const forced = process.env.OISNIPER_BROWSER;
-  const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.LOCALAPPDATA].filter(Boolean) as string[];
-  const find = (rel: string) => (rel.startsWith("/") ? (existsSync(rel) ? rel : null) : roots.map((r) => join(r, rel)).find((p) => existsSync(p)) ?? null);
-  const brave = () => (BRAVE[process.platform] ?? []).map(find).find(Boolean) ?? null;
-  if (forced === "bundled") return {};
-  if (forced === "brave") return brave() ? { executablePath: brave()! } : {};
-  if (forced) return { channel: forced };
-  const b = brave();
-  if (b) return { executablePath: b };
-  if (process.platform === "win32") {
-    if (find("Google\\Chrome\\Application\\chrome.exe")) return { channel: "chrome" };
-    if (find("Microsoft\\Edge\\Application\\msedge.exe")) return { channel: "msedge" };
-    return {};
-  }
-  if (process.platform === "darwin") return existsSync("/Applications/Google Chrome.app") ? { channel: "chrome" } : {};
-  return existsSync("/usr/bin/google-chrome") ? { channel: "chrome" } : {};
-}
 
 const REQUIRED_HEADERS = ["oi_chg_5m", "oi_chg_15m", "oi_chg_30m", "oi_chg_1h", "oi_chg_4h", "price_chg_5m", "vol_chg_1h"];
 const BLOCKED = /just a moment|attention required|verify you are human|cloudflare|404 not found|access denied|forbidden|too many requests/;
@@ -62,7 +35,9 @@ const CLOSED = /has been closed|target closed|browser has disconnected|scraper n
  *   merged with the last full 3-page read). A full read runs on the interval.
  * - Columns: all PRD timeframes are switched on via "Customize" whenever CoinGlass resets them.
  * - Blocks (403/404/429/challenge): report CHALLENGE, back off 5 -> 60 min, never work around them.
- * - Login: done once by the user via Health -> Show browser; expiry is detected and reported.
+ * - Login: one click (Connect): a visible window opens, the login is detected, columns are enabled, the window closes
+ *   and scraping continues hidden on the same profile. Expiry is detected and reported.
+ * - Launches are serialized and free a profile still held by a dying browser (the cause of "logged in, still down").
  */
 export class CoinGlassSource implements SnapshotSource {
   readonly name = "coinglass";
@@ -82,8 +57,88 @@ export class CoinGlassSource implements SnapshotSource {
   private lastV = 0;
   private everStarted = false;
   private lastRelaunch = 0;
+  private windowClosed = false;
+  private lock: Promise<unknown> = Promise.resolve();
+  readonly flow: ConnectFlow;
 
-  constructor(private o: { url: () => string; profileDir: string; pages?: () => number; fullEveryMs?: () => number }) {}
+  constructor(private o: { url: () => string; profileDir: string; pages?: () => number; fullEveryMs?: () => number }) {
+    this.flow = new ConnectFlow({
+      openVisible: () => this.relaunch(true),
+      toBackground: () => this.relaunch(false),
+      windowOpen: () => !!this.page && !this.windowClosed,
+      loginState: () => this.exclusive(() => this.loginState()),
+      configureColumns: () => this.exclusive(() => this.configureColumns()),
+      verifyBackground: () => this.exclusive(() => this.waitLoginState(15)),
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    });
+  }
+
+  /** Browser operations run one at a time: a read never races a relaunch. */
+  private exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.lock.then(fn, fn);
+    this.lock = next.catch(() => undefined);
+    return next;
+  }
+
+  connect(): ConnectStatus {
+    return this.flow.start();
+  }
+  cancelConnect(): void {
+    this.flow.cancel();
+  }
+  connectStatus(): ConnectStatus {
+    return this.flow.status;
+  }
+
+  private relaunch(visible: boolean): Promise<void> {
+    return this.exclusive(async () => {
+      this.blockedUntil = 0;
+      this.blockCount = 0;
+      await this.stop();
+      this.headless = !visible;
+      try {
+        await this.start();
+      } catch (e) {
+        if (!visible) throw e;
+        // A visible window can fail (no desktop session, blocked spawn): never leave the scraper dead.
+        this.headless = true;
+        await this.start().catch(() => undefined);
+        throw e;
+      }
+    });
+  }
+
+  private async loginState(): Promise<boolean | null> {
+    if (!this.page) return null;
+    const r = z.boolean().nullable().catch(null).parse(await this.page.evaluate<unknown>(LOGIN_STATE_SCRIPT).catch(() => null));
+    if (r != null) this.loggedIn = r;
+    return r;
+  }
+
+  private async waitLoginState(seconds: number): Promise<boolean | null> {
+    for (let i = 0; i < seconds; i++) {
+      const r = await this.loginState();
+      if (r != null) return r;
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    return null;
+  }
+
+  private missingRequired(headers: string[]): string[] {
+    const have = new Set(headers.map(classifyHeader));
+    return REQUIRED_HEADERS.filter((k) => !have.has(k as never));
+  }
+
+  /** Logged in: switch on the needed columns (CoinGlass saves them to the account) and report what is still missing. */
+  private async configureColumns(): Promise<string[]> {
+    if (!this.page) return [...REQUIRED_HEADERS];
+    if (!this.missingRequired((await this.extract()).headers).length) return [];
+    await this.page.evaluate<unknown>(ensureColumnsScript(WANTED_COLUMNS)).catch(() => -1);
+    this.lastConfigure = Date.now();
+    await this.load();
+    return this.missingRequired((await this.extract()).headers);
+  }
 
   async start(): Promise<void> {
     let pw: { chromium: { launchPersistentContext(dir: string, o: LaunchOpts): Promise<PwContext> } };
@@ -96,16 +151,34 @@ export class CoinGlassSource implements SnapshotSource {
     const which = browserLaunch();
     // Desktop viewport: CoinGlass serves a layout without the full table to small viewports.
     try {
-      this.ctx = await pw.chromium.launchPersistentContext(this.o.profileDir, { headless: this.headless, viewport: { width: 1440, height: 900 }, ...which });
+      this.ctx = await launchFreeingProfile(
+        () => pw.chromium.launchPersistentContext(this.o.profileDir, { headless: this.headless, viewport: { width: 1440, height: 900 }, ...which }),
+        () => killProfileBrowsers(this.o.profileDir),
+      );
     } catch (e) {
       // No system browser and no bundled Chromium: say what to do in plain words instead of a Playwright stack.
       if (!which.channel && !which.executablePath) throw new Error(NO_BROWSER);
       throw e;
     }
-    this.page = this.ctx.pages()[0] ?? (await this.ctx.newPage());
+    this.windowClosed = false;
+    const ctx = this.ctx;
+    // The user closed the window (or the browser died): mark it so the next read relaunches instead of failing forever.
+    ctx.on?.("close", () => {
+      if (this.ctx !== ctx) return;
+      this.windowClosed = true;
+      this.ctx = null;
+      this.page = null;
+    });
+    const page = ctx.pages()[0] ?? (await ctx.newPage());
+    page.on?.("close", () => {
+      if (this.page !== page) return;
+      this.windowClosed = true;
+      this.page = null;
+    });
+    this.page = page;
     this.everStarted = true;
     await this.load();
-    this.watch(); // re-attach after Show/Hide browser relaunch
+    this.watch(); // re-attach after a relaunch
   }
 
   private async load() {
@@ -142,17 +215,17 @@ export class CoinGlassSource implements SnapshotSource {
   }
 
   private async extract(): Promise<RawTable> {
-    const raw = await this.page!.evaluate<unknown>(EXTRACT_SCRIPT);
+    if (!this.page) return { headers: [], rows: [] };
+    const raw = await this.page.evaluate<unknown>(EXTRACT_SCRIPT);
     const parsed = RawTableSchema.safeParse(raw);
     return parsed.success ? parsed.data : { headers: [], rows: [] };
   }
 
   private async ensureColumns(headers: string[]): Promise<void> {
-    const have = new Set(headers.map(classifyHeader));
-    if (REQUIRED_HEADERS.every((k) => have.has(k as never))) return;
+    if (!this.page || !this.missingRequired(headers).length) return;
     if (this.lastConfigure > this.lastLoad && Date.now() - this.lastConfigure < 600_000) return; // no click loops
     this.lastConfigure = Date.now();
-    const n = z.number().safeParse(await this.page!.evaluate<unknown>(ensureColumnsScript(WANTED_COLUMNS)));
+    const n = z.number().safeParse(await this.page.evaluate<unknown>(ensureColumnsScript(WANTED_COLUMNS)).catch(() => -1));
     log.info({ toggled: n.success ? n.data : null, loggedIn: this.loggedIn }, "coinglass columns re-enabled");
   }
 
@@ -160,7 +233,7 @@ export class CoinGlassSource implements SnapshotSource {
     const mins = BACKOFF_MIN[Math.min(this.blockCount, BACKOFF_MIN.length - 1)]!;
     this.blockCount++;
     this.blockedUntil = Date.now() + mins * 60_000;
-    const note = `CoinGlass refused the page ("${title.slice(0, 40)}"). Backing off ${mins} min. If it persists, open Health > Show browser.`;
+    const note = `CoinGlass refused the page ("${title.slice(0, 40)}"). Backing off ${mins} min. If it persists, click Connect CoinGlass.`;
     log.warn({ mins }, "coinglass blocked, backing off");
     return { table: { headers: [], rows: [] }, challenge: true, note, loggedIn: this.loggedIn };
   }
@@ -170,17 +243,22 @@ export class CoinGlassSource implements SnapshotSource {
    * until the agent restarted. Relaunch on the same profile, at most once a minute.
    */
   async read(): Promise<SourceResult> {
-    try {
-      return await this.readOnce();
-    } catch (e) {
-      const msg = String((e as Error).message);
-      if (!this.everStarted || !CLOSED.test(msg) || Date.now() - this.lastRelaunch < 60_000) throw e;
-      this.lastRelaunch = Date.now();
-      log.warn({ err: msg.split("\n")[0] }, "coinglass browser closed, relaunching");
-      await this.stop();
-      await this.start();
-      return await this.readOnce();
-    }
+    // While the user logs in, the window is theirs: no clicks, no paging. The service keeps the last status.
+    if (this.flow.active) return { table: { headers: [], rows: [] }, challenge: false, skip: true, note: this.flow.status.message, loggedIn: this.loggedIn };
+    return this.exclusive(async () => {
+      try {
+        return await this.readOnce();
+      } catch (e) {
+        const msg = String((e as Error).message);
+        if (!this.everStarted || !CLOSED.test(msg) || Date.now() - this.lastRelaunch < 60_000) throw e;
+        this.lastRelaunch = Date.now();
+        log.warn({ err: msg.split("\n")[0] }, "coinglass browser closed, relaunching hidden");
+        await this.stop();
+        this.headless = true;
+        await this.start();
+        return await this.readOnce();
+      }
+    });
   }
 
   private async readOnce(): Promise<SourceResult> {
@@ -190,10 +268,10 @@ export class CoinGlassSource implements SnapshotSource {
     const title = (await this.page.title().catch(() => "")).toLowerCase();
     if (BLOCKED.test(title)) return this.blocked(title);
     this.blockCount = 0;
-    this.loggedIn = z.boolean().catch(false).parse(await this.page.evaluate<unknown>(LOGIN_STATE_SCRIPT).catch(() => false));
+    await this.loginState();
     let note: string | undefined;
     if (this.loggedIn) this.wasLoggedIn = true;
-    else if (this.wasLoggedIn) note = "CoinGlass session expired: log in again via Health > Show browser";
+    else if (this.wasLoggedIn && this.loggedIn === false) note = "CoinGlass session expired: click Connect CoinGlass and log in again";
     await this.page.evaluate<unknown>(OBSERVE_SCRIPT).catch(() => false);
     let cur = await this.extract();
     if (cur.rows.length === 0 && Date.now() - this.lastLoad > 120_000) {
@@ -228,23 +306,6 @@ export class CoinGlassSource implements SnapshotSource {
     this.fullRows = table.rows;
     this.fullHeaders = table.headers;
     return { table, challenge: false, dataTs, note, loggedIn: this.loggedIn };
-  }
-
-  /** Show browser: relaunch headed on the same profile so the user can log in / pass a check once. */
-  async setVisible(show: boolean): Promise<void> {
-    if (this.headless === !show) return;
-    this.headless = !show;
-    this.blockedUntil = 0;
-    this.blockCount = 0;
-    await this.stop();
-    try {
-      await this.start();
-    } catch (e) {
-      // A visible window can fail (no desktop session, blocked spawn): never leave the scraper dead.
-      this.headless = true;
-      await this.start();
-      throw Object.assign(new Error(`Could not open a visible browser (${String((e as Error).message).split("\n")[0]}). Scraper continues headless. Start the agent from a desktop terminal to log in.`), { code: "EXCHANGE_ERROR" });
-    }
   }
 
   async stop(): Promise<void> {

@@ -58,4 +58,20 @@ export interface ExchangeResp {
   exchange: string; needsPassphrase: boolean; testnetAvailable: boolean; markets: number;
   health: { status: string; wsConnected: boolean; rttMs: number | null; clockOffsetMs: number | null; subscriptions: number; error: string | null } | null;
   key: { masked: string; testnet: boolean; status: string; tradeEnabled: boolean; takerPct: string | null; reason: string | null; warnings: string[]; permissions: { read: boolean | null; trade: boolean | null; withdraw: boolean | null; ipWhitelist: boolean | null } | null } | null;
+  report?: KeyReport | null;
+}
+
+/** Result of Test & connect (agent api/keys.ts). Masked key only. */
+export interface KeyReport {
+  exchange: string; masked: string; testnet: boolean;
+  verdict: "connected" | "warning" | "failed";
+  summary: string;
+  checks: { id: string; label: string; state: "ok" | "warn" | "fail"; detail: string }[];
+  needsConfirm: "no_withdraw" | null;
+}
+
+/** CoinGlass one-click connect progress (agent scraper/coinglassConnect.ts). */
+export interface ConnectStatus {
+  phase: "idle" | "opening" | "waiting_login" | "configuring" | "finishing" | "connected" | "warning" | "failed" | "cancelled";
+  message: string; startedAt: number | null; finishedAt: number | null; missingColumns: string[];
 }

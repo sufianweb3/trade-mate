@@ -5,6 +5,7 @@ import type { Store } from "../store/store";
 import type { Clock } from "../util/clock";
 import { newId } from "../util/ids";
 import { healthFor, parseTable, type RequiredGroup } from "./parser";
+import type { ConnectStatus } from "./coinglassConnect";
 import type { SnapshotSource } from "./source";
 
 export const KEEP_MS = 7 * 24 * 3_600_000;
@@ -32,6 +33,8 @@ export class ScraperService {
   private latest: MetricsSnapshot | null = null;
   private lastPersist = 0;
   private lastTick = 0;
+  private pushAttached = false;
+  private awaitingConnect = false;
   state: ScraperState;
 
   constructor(
@@ -70,11 +73,17 @@ export class ScraperService {
       return;
     }
     this.schedule();
-    // Push mode: the source tells us when new data is on screen; the interval stays as a fallback.
+    this.attachPush();
+    await this.tick();
+  }
+
+  /** Push mode: the source tells us when new data is on screen; the interval stays as a fallback. */
+  private attachPush() {
+    if (this.pushAttached) return;
+    this.pushAttached = true;
     this.src.onChange?.(() => {
       if (this.d.clock.now() - this.lastTick >= (this.opts.minIntervalMs ?? 2000)) void this.tick();
     });
-    await this.tick();
   }
 
   private schedule() {
@@ -104,8 +113,9 @@ export class ScraperService {
       const res = await this.src.read();
       this.state.loggedIn = res.loggedIn ?? this.state.loggedIn;
       this.state.note = res.note ?? null;
+      if (res.skip) return;
       if (res.challenge) {
-        this.setStatus("CHALLENGE", res.note ?? "Blocked or challenged: open Health and click Show browser");
+        this.setStatus("CHALLENGE", res.note ?? "Blocked or challenged: click Connect CoinGlass");
         return;
       }
       const required = this.opts.required?.();
@@ -136,8 +146,27 @@ export class ScraperService {
     }
   }
 
-  async showBrowser(show: boolean): Promise<void> {
-    await this.src.setVisible(show);
+  /** One-click connect for login-capable sources. Also revives a scraper whose first start failed. */
+  connect(): ConnectStatus | null {
+    if (!this.src.connect) return null;
+    if (!this.stopTimer) this.schedule();
+    this.attachPush();
+    this.awaitingConnect = true;
+    return this.src.connect();
+  }
+
+  cancelConnect(): void {
+    this.src.cancelConnect?.();
+  }
+
+  /** Polled by the panel while connecting; reads right away once the flow is over (no wait for the next interval). */
+  connectStatus(): ConnectStatus | null {
+    const s = this.src.connectStatus?.() ?? null;
+    if (s && this.awaitingConnect && s.finishedAt != null) {
+      this.awaitingConnect = false;
+      void this.tick();
+    }
+    return s;
   }
 
   async stop(): Promise<void> {

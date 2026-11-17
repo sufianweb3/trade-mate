@@ -71,8 +71,8 @@ If the browser does not open, copy that link from the terminal.
   Real mode has not been verified on a testnet yet: do not use it with money until `pnpm test:testnet` passes.
 - **Signal Data Source** (per bot, in its settings): CoinGlass or Exchange (free public exchange APIs; OI scope Aggregated
   or Trade venue only). Both are always collected; the other one is logged as shadow signals. Analytics → CoinGlass vs Exchange.
-- **CoinGlass**: one-time setup via Health → Show browser (opens Brave/Chrome/Edge with the bot's profile): log in, then
-  Customize → turn on OI Change 5m/15m/30m/1h/4h, Volume (1h%)/(4h%)/(24h%), Price Change 5m/1h/4h → Save. The login is kept.
+- **CoinGlass**: click **Connect CoinGlass** (Overview or Health). A Brave/Chrome/Edge window opens with the bot's profile; log in
+  and it closes by itself. The bot turns on the needed columns and keeps CoinGlass running hidden. The login is kept.
   CoinGlass blocks frequent automated loads; the scraper backs off and never works around it.
 - **Health** shows latency p50/p95 per stage (source → detected → gates → order → ack → fill → stop).
 - **Windows**: needs the Microsoft Visual C++ 2015-2022 Redistributable (x64) for the OS keychain, and a synced clock

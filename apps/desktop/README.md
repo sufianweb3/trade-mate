@@ -16,7 +16,7 @@ Trade Mate (Electron)
 - Closing the window keeps Trade Mate in the tray so bots keep running. **Quit** asks first and says how many positions are open.
 - If another copy of OI Sniper (the zip version) already runs, Trade Mate shows that instead of starting a second engine on the same data.
 - Data stays where the agent always keeps it: `%APPDATA%\oisniper` / `~/Library/Application Support/oisniper`. Installing, updating, rolling back and uninstalling never touch it.
-- CoinGlass works as before: the agent opens the user's Chrome / Brave / Edge for the one-time login (panel → Health → Show browser).
+- CoinGlass works as before: the agent opens the user's Chrome / Brave / Edge for the one-time login (panel → Connect CoinGlass; the window closes by itself once logged in).
 
 ## Commands (from the repo root)
 
