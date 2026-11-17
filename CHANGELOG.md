@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/sufianweb3/trade-mate/compare/v0.3.0...v0.3.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* clock sync no longer blocks Real when orders use exchange time ([#11](https://github.com/sufianweb3/trade-mate/issues/11)) ([adf05eb](https://github.com/sufianweb3/trade-mate/commit/adf05eb0a486046b23b1d4bdd8ff254c45f83680))
+
 ## [0.3.0](https://github.com/sufianweb3/trade-mate/compare/v0.2.0...v0.3.0) (2026-11-17)
 
 
