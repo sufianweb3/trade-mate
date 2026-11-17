@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sufianweb3/trade-mate/compare/v0.2.0...v0.3.0) (2026-11-17)
+
+
+### Features
+
+* one-click CoinGlass connect and Test & connect for API keys ([#9](https://github.com/sufianweb3/trade-mate/issues/9)) ([b4f4f9f](https://github.com/sufianweb3/trade-mate/commit/b4f4f9fac2eaba86d12622af31bd887a03773280))
+
 ## [0.2.0](https://github.com/sufianweb3/trade-mate/compare/v0.1.1...v0.2.0) (2026-11-14)
 
 
