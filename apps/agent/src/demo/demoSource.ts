@@ -64,7 +64,6 @@ export class DemoSource implements SnapshotSource {
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
-  async setVisible(): Promise<void> {}
 
   table(): RawTable {
     let cols = HEADERS.filter(([, k]) => !this.dropColumns.has(k));

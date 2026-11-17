@@ -11,6 +11,7 @@ import { analytics, openRow, overview } from "./analytics";
 import { VERSION } from "./server";
 import { cooldownState } from "../engine/cooldown";
 import { sourceComparison } from "./compare";
+import { currentKeyReport, retestStoredKey, testAndConnectKey } from "./keys";
 import { realReadiness } from "./readiness";
 import { latencyStats } from "./latency";
 
@@ -22,7 +23,8 @@ const TradeQuery = z.object({
 });
 const SignalQuery = z.object({ bot: z.string().optional(), run: z.string().optional(), status: z.string().optional(), reason: z.string().optional(), from: num, to: num, limit: num });
 const StartBody = z.object({ confirm: z.string().optional() }).default({});
-const KeyBody = KeySecretSchema.extend({ testnet: z.boolean().default(false), confirmNoWithdraw: z.boolean().default(false) });
+// testnet omitted = auto: real account first, then the exchange's testnet / demo.
+const KeyBody = KeySecretSchema.extend({ testnet: z.boolean().optional(), confirmNoWithdraw: z.boolean().default(false) });
 const Settings = z.object({
   scrapeIntervalMs: z.number().int().min(15000).max(120000).optional(),
   coinglassUrl: z.string().url().optional(),
@@ -77,7 +79,7 @@ export function registerRoutes(f: FastifyInstance, app: App): void {
     if (b.mode === "live") {
       const r = realReadiness(app);
       if (!r.ready) {
-        const missing = r.exchanges.flatMap((e) => e.items.filter((i) => !i.ok).map((i) => `${e.exchange}: ${i.label}`));
+        const missing = r.exchanges.flatMap((e) => e.items.filter((i) => !i.ok && i.required).map((i) => `${e.exchange}: ${i.label}`));
         throw Object.assign(new Error(`Real Mode Readiness not complete: ${missing.join("; ") || "no exchange key connected"}`), { code: "AUTH_FAILED" });
       }
     }
@@ -176,18 +178,26 @@ export function registerRoutes(f: FastifyInstance, app: App): void {
         exchange: ex, needsPassphrase: QUIRKS[ex].needsPassphrase, testnetAvailable: QUIRKS[ex].testnet != null,
         health: health.find((h) => h.exchange === ex) ?? null, markets: app.o.hub.markets(ex).length,
         key: k ? { masked: k.masked, testnet: k.testnet, status: st?.status ?? k.status, permissions: st?.permissions ?? k.permissions, tradeEnabled: st?.tradeEnabled ?? false, takerPct: st?.takerPct ?? null, reason: st?.reason ?? null, warnings: st?.warnings ?? [] } : null,
+        report: k ? currentKeyReport(app, ex) : null, // masked only
       };
     });
   });
+  const vaultOpen = () => {
+    if (!app.vault.unlocked) throw Object.assign(new Error(`Key vault is locked: ${app.vault.lockReason ?? "OS keychain unavailable and no OISNIPER_PASSPHRASE set."}`), { code: "AUTH_FAILED" });
+  };
+  // Paste -> test -> Connected / Warning / Failed with one line per check. Returns the masked report only.
   f.post("/api/exchanges/:ex/keys", async (req) => {
     const ex = parse(ExchangeId, (req.params as { ex: string }).ex);
     const body = parse(KeyBody, req.body);
-    if (!app.vault.unlocked) throw Object.assign(new Error(`Key vault is locked: ${app.vault.lockReason ?? "OS keychain unavailable and no OISNIPER_PASSPHRASE set."}`), { code: "AUTH_FAILED" });
-    const st = await app.accounts.connect(ex, { apiKey: body.apiKey, secret: body.secret, passphrase: body.passphrase }, body.testnet, body.confirmNoWithdraw);
-    if (st.status === "connected" || st.status === "unverified")
-      app.store.records.upsertKey({ exchange: ex, enc: app.vault.encrypt({ apiKey: body.apiKey, secret: body.secret, passphrase: body.passphrase }), masked: st.masked, permissions: st.permissions, status: st.status, testnet: body.testnet, created_at: now() });
-    app.syncLimitLoaders();
-    return st; // masked only
+    vaultOpen();
+    return testAndConnectKey(app, ex, { apiKey: body.apiKey, secret: body.secret, passphrase: body.passphrase }, { testnet: body.testnet, confirmNoWithdraw: body.confirmNoWithdraw });
+  });
+  f.post("/api/exchanges/:ex/keys/retest", async (req) => {
+    const ex = parse(ExchangeId, (req.params as { ex: string }).ex);
+    vaultOpen();
+    const r = await retestStoredKey(app, ex);
+    if (!r) throw Object.assign(new Error("No key saved for this exchange."), { code: "INVALID_CONFIG" });
+    return r;
   });
   f.get("/api/real/readiness", async () => realReadiness(app));
   // User-triggered: sets isolated margin, one-way mode and leverage on a symbol, then reads them back.
@@ -216,9 +226,15 @@ export function registerRoutes(f: FastifyInstance, app: App): void {
     version: VERSION, uptimeMs: now() - app.startedAt, scraper: app.scraper.state, exchangeData: app.exchangeData?.state ?? null, exchanges: app.o.hub.health(),
     snapshots: app.store.records.latestSnapshots(10), errors: app.store.records.errors(100), sleepGuard: app.sleep.active, vault: app.vault.kind, vaultReason: app.vault.lockReason,
   }));
-  f.post("/api/scraper/show-browser", async (req) => {
-    const b = parse(z.object({ show: z.boolean() }), req.body);
-    await app.scraper.showBrowser(b.show);
+  // One-click CoinGlass connect: starts in the background; the panel polls GET for progress.
+  f.post("/api/scraper/connect", async () => {
+    const s = app.scraper.connect();
+    if (!s) throw Object.assign(new Error("This data source has no login."), { code: "INVALID_CONFIG" });
+    return s;
+  });
+  f.get("/api/scraper/connect", async () => app.scraper.connectStatus());
+  f.post("/api/scraper/connect/cancel", async () => {
+    app.scraper.cancelConnect();
     return { ok: true };
   });
   f.get("/api/settings", async () => ({

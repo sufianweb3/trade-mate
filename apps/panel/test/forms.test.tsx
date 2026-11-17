@@ -12,12 +12,17 @@ vi.mock("@/lib/agent", () => ({
     if (path === "/api/real/readiness")
       return { ready: false, exchanges: [{ exchange: "binance", ready: false, items: [
         { id: "key", label: "Key connected", ok: true, detail: "AbCd••••wxyz" },
-        { id: "testnet", label: "Testnet pass recorded", ok: false, detail: "run pnpm test:testnet" },
+        { id: "testnet", label: "Testnet pass recorded", ok: false, detail: "optional", required: false },
+        { id: "clock", label: "Clock synced", ok: false, detail: "900 ms", required: true },
       ] }] };
     if (path === "/api/exchanges")
       return [{ exchange: "binance", markets: 895, health: { status: "ok", rttMs: 200, clockOffsetMs: -20, wsConnected: true, subscriptions: 2 }, key: null, needsPassphrase: false, testnetAvailable: true }];
     if (path === "/api/settings") return { scrapeIntervalMs: 30000, coinglassUrl: "https://www.coinglass.com/", warmSetSize: 20, theme: "system", dataDir: null, symbolOverrides: [] };
-    if (path.endsWith("/keys")) return { status: "connected", reason: null, warnings: [] };
+    if (path.endsWith("/keys")) {
+      const confirmed = init?.json?.confirmNoWithdraw === true;
+      return { exchange: "binance", masked: "k-12••••", testnet: false, verdict: confirmed ? "warning" : "failed", summary: confirmed ? "Connected with 1 warning(s): No IP whitelist." : "Confirm the key has no withdrawal permission to finish.",
+        needsConfirm: confirmed ? null : "no_withdraw", checks: [{ id: "auth", label: "Key accepted by the exchange", state: "ok", detail: "signed in" }, { id: "ip", label: "IP whitelist", state: confirmed ? "warn" : "ok", detail: "No IP whitelist." }] };
+    }
     return {};
   }),
 }));
@@ -35,10 +40,11 @@ function mount(ui: ReactElement) {
 describe("Real readiness", () => {
   beforeEach(() => { calls.length = 0; });
 
-  it("says OK / Missing in words, not by colour alone", async () => {
+  it("says OK / Missing / Recommended in words, not by colour alone", async () => {
     mount(<RealReadiness />);
     expect(await screen.findByText("OK")).toBeTruthy();
     expect(screen.getByText("Missing")).toBeTruthy();
+    expect(screen.getByText("Recommended")).toBeTruthy();
   });
 
   it("asks before changing account settings, then prepares", async () => {
@@ -53,15 +59,22 @@ describe("Real readiness", () => {
 describe("Exchange key form", () => {
   beforeEach(() => { calls.length = 0; });
 
-  it("sends the key as before and clears the secret after saving", async () => {
+  it("paste, Test & connect, confirm no-withdraw, shows the result and clears the secret", async () => {
     mount(<Exchanges />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect key" }));
-    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "k-123" } });
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: " k-123 " } });
     fireEvent.change(screen.getByLabelText("Secret"), { target: { value: "s-456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Validate and save" }));
-    await waitFor(() => expect(calls.some((c) => c.path === "/api/exchanges/binance/keys")).toBe(true));
-    const sent = calls.find((c) => c.path === "/api/exchanges/binance/keys")!.init!.json!;
-    expect(sent).toMatchObject({ apiKey: "k-123", secret: "s-456", testnet: true, confirmNoWithdraw: false });
+    fireEvent.click(screen.getByRole("button", { name: "Test & connect" }));
+    await screen.findByText("Confirm the key has no withdrawal permission to finish.");
+    const first = calls.find((c) => c.path === "/api/exchanges/binance/keys")!.init!.json!;
+    expect(first).toMatchObject({ apiKey: "k-123", secret: "s-456", confirmNoWithdraw: false });
+    expect(first.testnet).toBeUndefined(); // auto: real account first, then testnet
+    // secrets stay only while the confirmation is pending
+    expect((screen.getByLabelText("Secret") as HTMLInputElement).value).toBe("s-456");
+    fireEvent.click(screen.getByRole("button", { name: "Withdrawal is off, connect" }));
+    await screen.findByText("Connected, check warnings");
+    expect(calls.filter((c) => c.path === "/api/exchanges/binance/keys").at(-1)!.init!.json!.confirmNoWithdraw).toBe(true);
+    expect(screen.getByText("Warning")).toBeTruthy();
     await waitFor(() => expect((screen.getByLabelText("Secret") as HTMLInputElement).value).toBe(""));
   });
 });

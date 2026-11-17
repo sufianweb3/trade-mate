@@ -1,6 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, Empty, ErrorBox, Kpi, Loading, StatusBadge, Table, Td } from "@/components/ui";
+import { CoinGlassConnect } from "@/components/coinglass-connect";
+import { Card, Empty, ErrorBox, Kpi, Loading, StatusBadge, Table, Td } from "@/components/ui";
 import { api } from "@/lib/agent";
 import { dur, time } from "@/lib/format";
 import type { StateResp } from "@/lib/types";
@@ -43,10 +44,10 @@ export default function Health() {
         ) : null)}
         {!lat.data || !["live", "paper"].some((m) => (lat.data?.[m] ?? []).some((x) => x.n)) ? <Empty>No signals measured yet.</Empty> : null}
       </Card>
-      <Card title="CoinGlass column fill rate" action={<div className="flex gap-2">
-        <Button size="sm" onClick={() => void api("/api/scraper/show-browser", { method: "POST", json: { show: true } })} title="Opens a real Chromium window with the bot profile: log in to CoinGlass once or pass a check">Show browser (log in)</Button>
-        <Button size="sm" variant="ghost" onClick={() => void api("/api/scraper/show-browser", { method: "POST", json: { show: false } })}>Hide</Button>
-      </div>}>
+      <Card title="CoinGlass connection">
+        <CoinGlassConnect compact />
+      </Card>
+      <Card title="CoinGlass column fill rate">
         {s.lastHealth?.missingColumns.length ? <p className="mb-2 text-sm text-neg">Missing: {s.lastHealth.missingColumns.join(", ")}</p> : null}
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs tabular md:grid-cols-4">
           {fill.map(([k, v]) => <div key={k} className="flex justify-between"><span className="text-muted">{k}</span><span className={v < 0.5 ? "text-warn" : ""}>{(v * 100).toFixed(0)}%</span></div>)}

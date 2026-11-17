@@ -16,6 +16,17 @@ export interface AccountStatus {
   takerPct: string | null;
   reason: string | null;
   warnings: string[];
+  /** The exchange accepted the key's signature. */
+  authOk: boolean;
+  /** Permissions are hidden on this exchange: the user must confirm "no withdrawal" before the key is accepted. */
+  needsNoWithdrawConfirm: boolean;
+  /** USDT free in the futures wallet, shown on the local panel only. */
+  freeUsdt: string | null;
+}
+
+export interface TestedKey {
+  status: AccountStatus;
+  client: CcxtLike | null;
 }
 
 export interface SetupProbe {
@@ -62,17 +73,45 @@ export class LiveAccounts {
     return c;
   }
 
-  /** Validate a key: auth works, read perms, refuse withdrawal, probe trade endpoints. */
+  /** Validate a key and keep it (startup reload of stored keys). */
   async connect(ex: ExchangeId, s: KeySecret, testnet: boolean, userConfirmedNoWithdraw: boolean): Promise<AccountStatus> {
+    const r = await this.check(ex, s, testnet, userConfirmedNoWithdraw);
+    return this.save(ex, r.status, r.client);
+  }
+
+  /**
+   * Test a key WITHOUT touching the key in use: a bad paste must never drop a working client (open positions need it).
+   * `testnet` undefined = try the real account first, then the exchange's testnet / demo if the real one refuses.
+   */
+  async test(ex: ExchangeId, s: KeySecret, testnet: boolean | undefined, userConfirmedNoWithdraw: boolean): Promise<TestedKey> {
+    const real = await this.check(ex, s, testnet ?? false, userConfirmedNoWithdraw);
+    if (testnet !== undefined || real.status.authOk || QUIRKS[ex].testnet == null) return real;
+    const demo = await this.check(ex, s, true, userConfirmedNoWithdraw);
+    return demo.status.authOk ? demo : real;
+  }
+
+  /** Accepted test result becomes the key in use. */
+  adopt(t: TestedKey): AccountStatus {
+    return this.save(t.status.exchange, t.status, t.client);
+  }
+
+  /** Auth, permissions, refuse withdrawal, probe trade endpoints, fees. Changes nothing. */
+  private async check(ex: ExchangeId, s: KeySecret, testnet: boolean, userConfirmedNoWithdraw: boolean): Promise<TestedKey> {
     const q = QUIRKS[ex];
-    const st: AccountStatus = { exchange: ex, masked: maskKey(s.apiKey), testnet, status: "error", tradeEnabled: false, permissions: null, takerPct: null, reason: null, warnings: [] };
-    if (q.needsPassphrase && !s.passphrase) return this.save(ex, { ...st, status: "rejected", reason: "This exchange needs an API passphrase." }, null);
+    const st: AccountStatus = {
+      exchange: ex, masked: maskKey(s.apiKey), testnet, status: "error", tradeEnabled: false, permissions: null, takerPct: null, reason: null, warnings: [],
+      authOk: false, needsNoWithdrawConfirm: false, freeUsdt: null,
+    };
+    const no = (status: AccountStatus) => ({ status, client: null });
+    if (q.needsPassphrase && !s.passphrase) return no({ ...st, status: "rejected", reason: "This exchange needs an API passphrase." });
     let c: CcxtLike;
     try {
       c = await this.build(ex, s, testnet);
-      Balance.parse(await call(c, "fetchBalance", { type: "swap" }));
+      const b = Balance.parse(await call(c, "fetchBalance", { type: "swap" }));
+      st.freeUsdt = b.USDT?.free != null ? D(String(b.USDT.free)).toString() : null;
+      st.authOk = true;
     } catch (e) {
-      return this.save(ex, { ...st, status: "error", reason: `Auth failed: ${mapMsg(e)}` }, null);
+      return no({ ...st, status: "error", reason: `Auth failed: ${mapMsg(e)}` });
     }
     let perms: KeyPermissions | null = null;
     try {
@@ -81,11 +120,11 @@ export class LiveAccounts {
       st.warnings.push(`Could not read permissions: ${mapMsg(e)}`);
     }
     st.permissions = perms;
-    if (perms?.withdraw === true) return this.save(ex, { ...st, status: "rejected", reason: "Key has withdrawal permission. Create a key with read + futures trade only." }, null);
+    if (perms?.withdraw === true) return no({ ...st, status: "rejected", reason: "Key has withdrawal permission. Create a key with read + futures trade only." });
     if (perms?.withdraw == null && !userConfirmedNoWithdraw)
-      return this.save(ex, { ...st, status: "rejected", reason: "Permissions cannot be verified on this exchange. Confirm the key has no withdrawal permission to continue." }, null);
+      return no({ ...st, status: "rejected", needsNoWithdrawConfirm: true, reason: "This exchange does not say whether the key can withdraw. Confirm it has no withdrawal permission to continue." });
     if (perms?.ipWhitelist === false) st.warnings.push("No IP whitelist on this key.");
-    if (perms?.trade === false) return this.save(ex, { ...st, status: "rejected", reason: "Key lacks futures trade permission." }, null);
+    if (perms?.trade === false) return no({ ...st, status: "rejected", reason: "Key lacks futures trade permission." });
     st.tradeEnabled = await this.probeTrading(ex, c);
     if (!st.tradeEnabled) st.warnings.push("Order endpoints unavailable: data + paper only.");
     try {
@@ -95,7 +134,7 @@ export class LiveAccounts {
       st.warnings.push("Fee tier not readable, using market base tier.");
     }
     st.status = perms?.withdraw === false ? "connected" : "unverified";
-    return this.save(ex, st, c);
+    return { status: st, client: c };
   }
 
   /** MEXC-style suspended endpoints: cancel a non-existent order and inspect the error. Places nothing. */

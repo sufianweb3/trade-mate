@@ -36,8 +36,11 @@ export const OBSERVE_SCRIPT = `(() => {
 
 export const CHANGE_STATE_SCRIPT = `({ v: window.__oisV || 0, t: window.__oisT || 0 })`;
 
-/** Logged in when no "Login" / "Log in" / "Sign in" button is shown in the header. */
-export const LOGIN_STATE_SCRIPT = `(() => !Array.from(document.querySelectorAll("button, a")).some((b) => /^(log ?in|sign ?in)$/i.test((b.textContent || "").trim())))()`;
+/**
+ * Logged in when no "Login" / "Log in" / "Sign in" button is shown in the header. null while the page has not rendered
+ * its table yet: a half-loaded page has no login button either and used to read as "logged in".
+ */
+export const LOGIN_STATE_SCRIPT = `(() => document.querySelectorAll("tr.ant-table-row, table tbody tr").length < 1 ? null : !Array.from(document.querySelectorAll("button, a")).some((b) => /^(log ?in|sign ?in)$/i.test((b.textContent || "").trim())))()`;
 
 /** Columns the PRD collects (PRD 5.1). CoinGlass hides most of them by default. */
 export const WANTED_COLUMNS = [
