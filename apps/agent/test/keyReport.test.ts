@@ -62,6 +62,13 @@ describe("API key test report", () => {
     expect(r.checks.find((c) => c.id === "leverage")?.detail).toContain("max 5x");
   });
 
+  it("PC clock off but orders use exchange time: clock is OK, not a warning", () => {
+    const r = buildKeyReport(good, probe, 3000, 10, true);
+    expect(state(r, "clock")).toBe("ok");
+    expect(r.checks.find((c) => c.id === "clock")?.detail).toContain("exchange time");
+    expect(r.verdict).toBe("connected");
+  });
+
   it("order endpoints unavailable (MEXC style): Warning, data + paper only", () => {
     const r = buildKeyReport({ ...good, tradeEnabled: false }, null, 40, 10);
     expect(r.verdict).toBe("warning");

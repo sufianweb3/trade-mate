@@ -11,6 +11,9 @@ import type { LiveAccounts } from "./liveAccounts";
 import { iocCap, simulateIoc } from "./simFill";
 import type { AdapterEvent, ExecutionAdapter, FillResult, IocRequest, PositionCtx, ReconcileItem, StopRequest, TpRequest } from "./types";
 
+/** PRD: clock drift > 1 s blocks live orders when exchange time correction is not available. */
+export const CLOCK_BLOCK_MS = 1000;
+
 const Order = z.object({
   id: z.string(),
   status: z.string().nullable().optional(),
@@ -81,9 +84,11 @@ export class LiveAdapter implements ExecutionAdapter {
     return baseToContracts(base, m.contractSize, step).toNumber();
   }
   private checkClock(ex: ExchangeId) {
+    // ccxt signs with exchange time (adjustForTimeDifference): the PC clock cannot get an order rejected or mistimed.
+    if (this.o.accounts.timeCorrected(ex)) return;
     const h = this.o.hub.health().find((x) => x.exchange === ex);
-    // Unknown offset (sync never succeeded) blocks too: signed requests with a bad clock are rejected or mistimed.
-    if (h?.clockOffsetMs == null || Math.abs(h.clockOffsetMs) > 500) throw Object.assign(new Error("clock drift"), { code: "CLOCK_DRIFT" });
+    // No correction: PRD rule, drift > 1 s (or unknown) blocks live orders until synced.
+    if (h?.clockOffsetMs == null || Math.abs(h.clockOffsetMs) > CLOCK_BLOCK_MS) throw Object.assign(new Error("clock drift"), { code: "CLOCK_DRIFT" });
   }
 
   /** ex|symbol|leverage already set up on the exchange (valid until the agent restarts). */

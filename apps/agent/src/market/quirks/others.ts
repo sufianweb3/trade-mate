@@ -5,7 +5,7 @@ import { unknownPermissions, type ExchangeQuirks } from "./types";
 
 export const gate: ExchangeQuirks = {
   ccxtId: "gate",
-  options: { defaultType: "swap" },
+  options: { defaultType: "swap", adjustForTimeDifference: true },
   testnet: "sandbox",
   needsPassphrase: false,
   stopParams: (t) => ({ reduceOnly: true, price_type: t === "mark" ? 1 : 0 }),
@@ -16,7 +16,7 @@ export const gate: ExchangeQuirks = {
 export const kucoin: ExchangeQuirks = {
   // KuCoin futures uses a separate API host; ccxt "kucoinfutures" targets it.
   ccxtId: "kucoinfutures",
-  options: { defaultType: "swap" },
+  options: { defaultType: "swap", adjustForTimeDifference: true },
   bookLimit: 100, // KuCoin futures accepts only 20 or 100
   testnet: "sandbox",
   needsPassphrase: true,
@@ -27,7 +27,7 @@ export const kucoin: ExchangeQuirks = {
 
 export const mexc: ExchangeQuirks = {
   ccxtId: "mexc",
-  options: { defaultType: "swap" },
+  options: { defaultType: "swap", adjustForTimeDifference: true },
   testnet: null,
   needsPassphrase: false,
   stopParams: (t) => ({ reduceOnly: true, triggerType: t === "mark" ? 2 : 1, openType: 1 }),

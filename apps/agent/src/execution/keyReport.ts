@@ -28,7 +28,7 @@ const CLOCK_MAX_MS = 500;
  * Turn a key test (plus the margin / position-mode / leverage setup and the clock) into one plain report.
  * Pure: everything it needs is passed in.
  */
-export function buildKeyReport(st: AccountStatus, probe: SetupProbe | null, clockOffsetMs: number | null, leverage: number): KeyReport {
+export function buildKeyReport(st: AccountStatus, probe: SetupProbe | null, clockOffsetMs: number | null, leverage: number, timeCorrected = false): KeyReport {
   const checks: KeyCheck[] = [];
   const add = (id: KeyCheck["id"], label: string, state: CheckState, detail: string) => checks.push({ id, label, state, detail });
 
@@ -62,7 +62,8 @@ export function buildKeyReport(st: AccountStatus, probe: SetupProbe | null, cloc
   }
 
   if (st.authOk) {
-    if (clockOffsetMs == null) add("clock", "Clock in sync", "warn", "offset unknown yet");
+    if (timeCorrected) add("clock", "Clock in sync", "ok", `orders use exchange time${clockOffsetMs == null ? "" : ` (PC clock off by ${Math.round(clockOffsetMs)} ms)`}`);
+    else if (clockOffsetMs == null) add("clock", "Clock in sync", "warn", "offset unknown yet");
     else add("clock", "Clock in sync", Math.abs(clockOffsetMs) < CLOCK_MAX_MS ? "ok" : "warn", `${Math.round(clockOffsetMs)} ms${Math.abs(clockOffsetMs) < CLOCK_MAX_MS ? "" : ": sync your PC clock (Windows Settings > Time > Sync now)"}`);
     if (st.testnet) add("testnet_key", "Real account", "warn", "This is a testnet / demo key: Real trades go to the testnet, not your real balance.");
   }

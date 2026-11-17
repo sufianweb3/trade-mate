@@ -35,7 +35,7 @@ function binance() {
       return { id, status: "canceled" };
     },
   };
-  const accounts = { get: () => client, canTrade: () => true, statusOf: () => null } as unknown as LiveAccounts;
+  const accounts = { get: () => client, canTrade: () => true, timeCorrected: () => false, statusOf: () => null } as unknown as LiveAccounts;
   const a = new LiveAdapter({ botId: "real", hub, clock, accounts, maxCapital: () => D(300), takerOverridePct: {} });
   return { a, triggerBook };
 }

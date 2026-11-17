@@ -8,12 +8,13 @@ import type { Clock } from "../src/util/clock";
 
 const SYM = "BTC/USDT:USDT";
 const clock = { now: () => 1_000, setInterval: () => () => undefined } as unknown as Clock;
+let clockOffsetMs: number | null = 0;
 const hub = {
   market: () => ({ tickSize: D("0.1"), qtyStep: D("0.001"), contractSize: D(1) }),
   rttMs: () => 0,
   book: () => null,
   bookAt: () => null,
-  health: () => [{ exchange: "binance", clockOffsetMs: 0 }],
+  health: () => [{ exchange: "binance", clockOffsetMs }],
   recordOrderLatency: () => undefined,
 } as unknown as MarketHub;
 
@@ -21,7 +22,7 @@ const hub = {
  * Fake Binance client. `create` is the order response; `fetch` the later order lookup (or an error).
  * Binance answers an IOC with "FILLED" and the filled amount, but without the average price.
  */
-function adapterWith(create: Record<string, unknown>, fetch: Record<string, unknown> | Error) {
+function adapterWith(create: Record<string, unknown>, fetch: Record<string, unknown> | Error, timeCorrected = false) {
   let fetches = 0;
   const client = {
     id: "binanceusdm",
@@ -34,7 +35,7 @@ function adapterWith(create: Record<string, unknown>, fetch: Record<string, unkn
       return fetch;
     },
   };
-  const accounts = { get: () => client, canTrade: () => true, statusOf: () => ({ takerPct: 0.05 }) } as unknown as LiveAccounts;
+  const accounts = { get: () => client, canTrade: () => true, timeCorrected: () => timeCorrected, statusOf: () => ({ takerPct: 0.05 }) } as unknown as LiveAccounts;
   const a = new LiveAdapter({ botId: "real", hub, clock, accounts, maxCapital: () => D(300), takerOverridePct: {} });
   return { a, fetches: () => fetches };
 }
@@ -75,5 +76,27 @@ describe("LiveAdapter: a filled entry is never dropped", () => {
     const r = await a.placeIoc(req);
     expect(r.status).toBe("rejected");
     expect(r.code).toBe("ORDER_NOT_FILLED");
+  });
+});
+
+describe("LiveAdapter: clock", () => {
+  const filled = { ...filledNoPrice, average: 66721.4 };
+  it("exchange time correction on: a PC clock far off does not block (closing orders included)", async () => {
+    clockOffsetMs = 4000;
+    const { a } = adapterWith(filled, filled, true);
+    expect((await a.placeIoc(req)).status).toBe("filled");
+    expect((await a.placeIoc({ ...req, reduceOnly: true, side: "sell" })).status).toBe("filled");
+    clockOffsetMs = null;
+    expect((await a.placeIoc(req)).status).toBe("filled");
+  });
+  it("no correction: drift up to 1 s passes, above 1 s or unknown blocks (PRD)", async () => {
+    const { a } = adapterWith(filled, filled, false);
+    clockOffsetMs = 800;
+    expect((await a.placeIoc(req)).status).toBe("filled");
+    clockOffsetMs = 1500;
+    expect((await a.placeIoc(req)).code).toBe("CLOCK_DRIFT");
+    clockOffsetMs = null;
+    expect((await a.placeIoc(req)).code).toBe("CLOCK_DRIFT");
+    clockOffsetMs = 0;
   });
 });
